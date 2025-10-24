@@ -11,8 +11,8 @@ Dependencies
 
 Example
 -------
-    python -m src.data.upload_flowers102
-    python -m src.data.upload_flowers102 --repo-id your-name/flowers102-split
+    python -m data.upload_flowers102
+    python -m data.upload_flowers102 --repo-id your-name/flowers102-split
 """
 
 from __future__ import annotations
@@ -182,7 +182,7 @@ def build_dataset_card(ratios: SplitRatios, source_repo: str) -> str:
         # Oxford 102 Flowers (Custom Split)
 
         This dataset re-packages the Oxford 102 Flowers dataset with a custom train/validation/test
-        split produced by `src.data.upload_flowers102`.
+        split produced by `data.upload_flowers102`.
 
         ## Split Ratios
 
