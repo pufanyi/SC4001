@@ -1,4 +1,3 @@
-import sys
 from loguru import logger
 from rich.console import Console
 from rich.logging import RichHandler
@@ -36,4 +35,3 @@ logger.add(
 # )
 
 __all__ = ["logger", "console"]
-
