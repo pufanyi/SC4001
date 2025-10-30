@@ -1,6 +1,0 @@
-dataset_id: pufanyi/flowers102
-instruction: >
-  Identify the flower species shown in the picture from the Oxford 102 dataset. Respond with the exact class name.
-
-max_train_samples: null
-max_eval_samples: null
