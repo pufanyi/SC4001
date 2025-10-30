@@ -24,7 +24,9 @@ def _resolve_config(cfg: DictConfig) -> ExperimentConfig:
 
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     config = _resolve_config(cfg)
 
     set_seed(config.seed)

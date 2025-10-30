@@ -3,9 +3,7 @@ defaults:
   - model: qwen3_vl
   - trainer: default
   - _self_
-
 seed: 42
-
 hydra:
   run:
     dir: .

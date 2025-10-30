@@ -1,5 +1,5 @@
 from datasets import load_dataset
-from PIL import Image
+
 
 def main():
     # 1️⃣ Load the dataset from Hugging Face
@@ -10,7 +10,7 @@ def main():
     val_ds = dataset["validation"]
     test_ds = dataset["test"]
 
-    print(f"✅ Dataset loaded successfully!")
+    print("✅ Dataset loaded successfully!")
     print(f"Training samples: {len(train_ds)}")
     print(f"Validation samples: {len(val_ds)}")
     print(f"Test samples: {len(test_ds)}")
@@ -33,6 +33,6 @@ def main():
     # (Optional) Display the image if you are in Jupyter or VSCode interactive mode
     # image.show()
 
+
 if __name__ == "__main__":
     main()
-

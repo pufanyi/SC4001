@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 from .constants import DEFAULT_INSTRUCTION
 
@@ -12,8 +11,8 @@ from .constants import DEFAULT_INSTRUCTION
 class DatasetConfig:
     dataset_id: str = "pufanyi/flowers102"
     instruction: str = DEFAULT_INSTRUCTION
-    max_train_samples: Optional[int] = None
-    max_eval_samples: Optional[int] = None
+    max_train_samples: int | None = None
+    max_eval_samples: int | None = None
 
 
 @dataclass
@@ -43,7 +42,7 @@ class TrainerConfig:
     save_total_limit: int = 2
     dataloader_num_workers: int = 0
     push_to_hub: bool = False
-    hub_model_id: Optional[str] = None
+    hub_model_id: str | None = None
     evaluation_strategy: str = "steps"
     report_to: str = "none"
     precision: PrecisionConfig = field(default_factory=PrecisionConfig)

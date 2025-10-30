@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Dict, Sequence
+from typing import Any
 
 import torch
 from datasets import Dataset, DatasetDict, load_dataset
@@ -30,7 +31,7 @@ def _ensure_list_of_tensors(
 class QwenVLDataCollator:
     processor: AutoProcessor
 
-    def __call__(self, features: Sequence[Dict[str, Any]]) -> Dict[str, torch.Tensor]:
+    def __call__(self, features: Sequence[dict[str, Any]]) -> dict[str, torch.Tensor]:
         batch = {
             "input_ids": _ensure_list_of_tensors(
                 [f["input_ids"] for f in features],
@@ -44,8 +45,12 @@ class QwenVLDataCollator:
                 [f["labels"] for f in features],
                 padding_value=-100,
             ),
-            "pixel_values": torch.stack([torch.as_tensor(f["pixel_values"]) for f in features]),
-            "image_grid_thw": torch.stack([torch.as_tensor(f["image_grid_thw"]) for f in features]),
+            "pixel_values": torch.stack(
+                [torch.as_tensor(f["pixel_values"]) for f in features]
+            ),
+            "image_grid_thw": torch.stack(
+                [torch.as_tensor(f["image_grid_thw"]) for f in features]
+            ),
         }
 
         if "pixel_values_videos" in features[0]:
@@ -59,7 +64,7 @@ class QwenVLDataCollator:
         return batch
 
 
-def build_messages(label_idx: int, instruction: str) -> list[Dict[str, Any]]:
+def build_messages(label_idx: int, instruction: str) -> list[dict[str, Any]]:
     label_text = FLOWER_CLASSES[label_idx]
     return [
         {
@@ -79,8 +84,8 @@ def build_messages(label_idx: int, instruction: str) -> list[Dict[str, Any]]:
 def preprocess_example(
     processor: AutoProcessor,
     instruction: str,
-    example: Dict[str, Any],
-) -> Dict[str, Any]:
+    example: dict[str, Any],
+) -> dict[str, Any]:
     messages = build_messages(example["label"], instruction)
 
     prompt_text = processor.apply_chat_template(

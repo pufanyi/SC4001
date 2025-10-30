@@ -6,6 +6,7 @@ and normalize label text for comparison.
 
 from datasets import load_dataset
 
+
 def load_flowers102():
     """
     Load the Oxford Flowers-102 dataset (pufanyi version from Hugging Face)
@@ -20,7 +21,7 @@ def load_flowers102():
     id2label = train_ds.features["label"].names
     label2id = {name: i for i, name in enumerate(id2label)}
 
-    print(f"✅ Loaded Flowers102 dataset:")
+    print("✅ Loaded Flowers102 dataset:")
     print(f"Train: {len(train_ds)} | Validation: {len(val_ds)} | Test: {len(test_ds)}")
     print(f"Number of classes: {len(id2label)}")
 
@@ -42,8 +43,6 @@ if __name__ == "__main__":
     label_id = example["label"]
     label_raw = id2label[label_id]
     label_norm = normalize_label(label_raw)
-    print(f"\nExample label:")
+    print("\nExample label:")
     print(f"Raw: {label_raw}")
     print(f"Normalized: {label_norm}")
-
-

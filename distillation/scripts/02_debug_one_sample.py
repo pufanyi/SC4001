@@ -1,9 +1,9 @@
+import json
 import os
 import sys
-import json
-from datasets import load_dataset
-from PIL import Image
+
 import google.generativeai as genai
+from datasets import load_dataset
 
 # 🔌 Make sure we can import our own repo modules
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -11,6 +11,7 @@ if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
 from distillation.scripts.utils_flowers import normalize_label
+
 
 # --------------------------
 # Helper: strip code fences if Gemini returns ```json ... ```
@@ -31,6 +32,7 @@ def clean_json_text(text: str) -> str:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
     return text
+
 
 # --------------------------
 # 1️⃣ Configure Gemini 2.5 Pro
@@ -100,7 +102,7 @@ cleaned_text = clean_json_text(raw_text)
 
 try:
     parsed = json.loads(cleaned_text)
-except json.JSONDecodeError as e:
+except json.JSONDecodeError:
     print("\n❌ Failed to parse JSON after cleanup.")
     print("Cleaned text was:\n", cleaned_text)
     sys.exit(1)
@@ -108,7 +110,7 @@ except json.JSONDecodeError as e:
 reasoning = parsed.get("reasoning", "").strip()
 pred_raw = parsed.get("final_answer", "").strip()
 pred_norm = normalize_label(pred_raw)
-match = (pred_norm == gold_label_norm)
+match = pred_norm == gold_label_norm
 
 # --------------------------
 # 6️⃣ Display results
@@ -119,5 +121,3 @@ print(f"Gemini prediction (norm): {pred_norm}")
 print(f"Ground truth (raw): {gold_label_raw}")
 print(f"Ground truth (norm): {gold_label_norm}")
 print(f"Match: {match}")
-
-

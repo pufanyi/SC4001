@@ -1,11 +1,12 @@
+import json
 import os
 import sys
-import json
-import uuid
 import time
-from tqdm import tqdm
-from datasets import load_dataset
+import uuid
+
 import google.generativeai as genai
+from datasets import load_dataset
+from tqdm import tqdm
 
 # ─────────────────────────────────────────
 # Make sure we can import our own utilities
@@ -25,6 +26,7 @@ PROGRESS_JSON = os.path.join(OUTPUT_DIR, "progress.json")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+
 # ─────────────────────────────────────────
 # Helper: load & save progress
 # ─────────────────────────────────────────
@@ -37,11 +39,12 @@ def load_progress():
         return 0
 
     try:
-        with open(PROGRESS_JSON, "r", encoding="utf-8") as f:
+        with open(PROGRESS_JSON, encoding="utf-8") as f:
             data = json.load(f)
         return int(data.get("next_index", 0))
     except Exception:
         return 0
+
 
 def save_progress(next_index: int):
     """
@@ -49,6 +52,7 @@ def save_progress(next_index: int):
     """
     with open(PROGRESS_JSON, "w", encoding="utf-8") as f:
         json.dump({"next_index": next_index}, f, ensure_ascii=False)
+
 
 # ─────────────────────────────────────────
 # Helper: key rotation for Gemini
@@ -75,8 +79,10 @@ def load_api_keys():
         "No API keys found. Set GEMINI_KEYS='k1,k2,...' or GEMINI_API_KEY='k1'"
     )
 
+
 API_KEYS = load_api_keys()
 current_key_index = 0
+
 
 def init_gemini_client():
     """
@@ -88,7 +94,9 @@ def init_gemini_client():
     model = genai.GenerativeModel("gemini-2.5-pro")
     return model
 
+
 model = init_gemini_client()
+
 
 def rotate_key_and_retry():
     """
@@ -100,6 +108,7 @@ def rotate_key_and_retry():
     # small sleep helps cool off both the model and avoid hammering
     time.sleep(10)
     model = init_gemini_client()
+
 
 # ─────────────────────────────────────────
 # Helper: clean Gemini output for JSON
@@ -117,6 +126,7 @@ def clean_json_text(text: str) -> str:
             lines = lines[:-1]
         text = "\n".join(lines).strip()
     return text
+
 
 # ─────────────────────────────────────────
 # Prompt for Gemini (Version A)
@@ -145,6 +155,7 @@ Rules:
 - Do not say 'I am not sure' or 'I cannot tell'. Always choose the most likely flower type.
 """
 
+
 # ─────────────────────────────────────────
 # Main distillation logic
 # ─────────────────────────────────────────
@@ -169,9 +180,9 @@ def main():
     # 4. Iterate
     for idx in tqdm(range(start_index, total), desc="Distilling train split"):
         row = train_ds[idx]
-        image = row["image"]                  # PIL image
-        label_id = row["label"]               # numeric label
-        gold_label_raw = id2label[label_id]   # e.g. "wallflower"
+        image = row["image"]  # PIL image
+        label_id = row["label"]  # numeric label
+        gold_label_raw = id2label[label_id]  # e.g. "wallflower"
         gold_label_norm = normalize_label(gold_label_raw)
 
         # ---- 4a. Call Gemini with retries and key rotation ----
@@ -209,22 +220,19 @@ def main():
         teacher_reasoning = parsed.get("reasoning", "").strip()
         teacher_pred_raw = parsed.get("final_answer", "").strip()
         teacher_pred_norm = normalize_label(teacher_pred_raw)
-        match = (teacher_pred_norm == gold_label_norm)
+        match = teacher_pred_norm == gold_label_norm
 
         # ---- 4c. Build the record for this sample ----
         record = {
             "uid": str(uuid.uuid4()),
             "split": "train",
             "image_index": idx,
-
             "gold_label_raw": gold_label_raw,
             "gold_label_norm": gold_label_norm,
-
             "question": parsed.get("question", ""),
             "teacher_reasoning": teacher_reasoning,
             "teacher_prediction_raw": teacher_pred_raw,
             "teacher_prediction_norm": teacher_pred_norm,
-
             "match": match,
         }
 
@@ -239,6 +247,7 @@ def main():
     out_f.close()
     print(f"✅ Done. Distilled data written to {FINAL_JSONL}")
     print(f"   Progress saved to {PROGRESS_JSON}")
+
 
 if __name__ == "__main__":
     main()

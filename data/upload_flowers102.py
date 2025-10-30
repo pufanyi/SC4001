@@ -25,7 +25,14 @@ from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
-from datasets import ClassLabel, Dataset, DatasetDict, Features, Image, concatenate_datasets
+from datasets import (
+    ClassLabel,
+    Dataset,
+    DatasetDict,
+    Features,
+    Image,
+    concatenate_datasets,
+)
 from huggingface_hub import HfApi, HfFolder
 
 
@@ -198,7 +205,14 @@ def build_dataset_card(ratios: SplitRatios, source_repo: str) -> str:
     )
 
 
-def push_readme(api: HfApi, repo_id: str, token: str | None, readme: str, branch: str | None, commit_message: str) -> None:
+def push_readme(
+    api: HfApi,
+    repo_id: str,
+    token: str | None,
+    readme: str,
+    branch: str | None,
+    commit_message: str,
+) -> None:
     api.upload_file(
         path_or_fileobj=BytesIO(readme.encode("utf-8")),
         path_in_repo="README.md",
@@ -250,7 +264,9 @@ def load_flowers102_via_torchvision(data_root: Path) -> DatasetDict:
 def main() -> None:
     args = parse_args()
 
-    token = args.token or os.environ.get("HUGGINGFACE_HUB_TOKEN") or HfFolder.get_token()
+    token = (
+        args.token or os.environ.get("HUGGINGFACE_HUB_TOKEN") or HfFolder.get_token()
+    )
     if not token:
         print(
             "A Hugging Face token is required. Run `huggingface-cli login`, set HUGGINGFACE_HUB_TOKEN, or pass --token.",
@@ -265,7 +281,10 @@ def main() -> None:
         sys.exit(1)
 
     data_root = Path(args.data_root)
-    print(f"Downloading Oxford 102 Flowers dataset via torchvision into {data_root.expanduser()}...", flush=True)
+    print(
+        f"Downloading Oxford 102 Flowers dataset via torchvision into {data_root.expanduser()}...",
+        flush=True,
+    )
     try:
         source_dataset = load_flowers102_via_torchvision(data_root)
     except RuntimeError as exc:
@@ -306,7 +325,9 @@ def main() -> None:
         commit_message="Update dataset card",
     )
 
-    print("Done! Dataset is available at https://huggingface.co/datasets/" + args.repo_id)
+    print(
+        "Done! Dataset is available at https://huggingface.co/datasets/" + args.repo_id
+    )
 
 
 if __name__ == "__main__":
