@@ -50,7 +50,8 @@ def main():
     print("🧹 Filtering...")
     clean_data = [row for row in data if is_good_sample(row)]
     print(
-        f"✅ Kept {len(clean_data)} clean samples ({len(clean_data) / len(data) * 100:.2f}%)"
+        f"✅ Kept {len(clean_data)} clean samples ("
+        f"{len(clean_data) / len(data) * 100:.2f}%)"
     )
 
     print(f"💾 Saving to {OUTPUT_FILE} ...")

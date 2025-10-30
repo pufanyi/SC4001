@@ -48,19 +48,25 @@ class SplitRatios:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Download the Oxford 102 Flowers dataset, create train/validation/test splits, "
-            "and push the processed dataset to the Hugging Face Hub."
+            "Download the Oxford 102 Flowers dataset, create train/validation/test "
+            "splits, and push the processed dataset to the Hugging Face Hub."
         )
     )
     parser.add_argument(
         "--repo-id",
         default="pufanyi/flowers102",
-        help="Destination dataset repo on the Hugging Face Hub. Default: pufanyi/flowers102.",
+        help=(
+            "Destination dataset repo on the Hugging Face Hub. Default: "
+            "pufanyi/flowers102."
+        ),
     )
     parser.add_argument(
         "--token",
         default=None,
-        help="Hugging Face token with write permissions. Defaults to HUGGINGFACE_HUB_TOKEN.",
+        help=(
+            "Hugging Face token with write permissions. Defaults to "
+            "HUGGINGFACE_HUB_TOKEN."
+        ),
     )
     parser.add_argument(
         "--private",
@@ -99,12 +105,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--branch",
         default=None,
-        help="Optional git branch on the Hub to push to. Defaults to the repo's main branch.",
+        help=(
+            "Optional git branch on the Hub to push to. Defaults to the repo's "
+            "main branch."
+        ),
     )
     parser.add_argument(
         "--max-shard-size",
         default="500MB",
-        help="Maximum size for dataset shards when uploading. Default mirrors datasets default.",
+        help=(
+            "Maximum size for dataset shards when uploading. Default mirrors "
+            "datasets default."
+        ),
     )
     parser.add_argument(
         "--commit-message",
@@ -188,8 +200,8 @@ def build_dataset_card(ratios: SplitRatios, source_repo: str) -> str:
 
         # Oxford 102 Flowers (Custom Split)
 
-        This dataset re-packages the Oxford 102 Flowers dataset with a custom train/validation/test
-        split produced by `data.upload_flowers102`.
+        This dataset re-packages the Oxford 102 Flowers dataset with a custom
+        train/validation/test split produced by `data.upload_flowers102`.
 
         ## Split Ratios
 
@@ -199,8 +211,8 @@ def build_dataset_card(ratios: SplitRatios, source_repo: str) -> str:
 
         ## Source
 
-        Original images and annotations come from the Oxford 102 Flowers dataset, as distributed
-        on the Hugging Face Hub under `{source_repo}`.
+        Original images and annotations come from the Oxford 102 Flowers dataset,
+        as distributed on the Hugging Face Hub under `{source_repo}`.
         """
     )
 
@@ -229,14 +241,16 @@ def load_flowers102_via_torchvision(data_root: Path) -> DatasetDict:
         from torchvision.datasets import Flowers102
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
-            "torchvision is required to download the Oxford 102 dataset. Install it via `pip install torch torchvision scipy`."
+            "torchvision is required to download the Oxford 102 dataset. "
+            "Install it via `pip install torch torchvision scipy`."
         ) from exc
 
     try:
         import scipy  # noqa: F401
     except ImportError as exc:  # pragma: no cover - optional dependency
         raise RuntimeError(
-            "scipy is required by torchvision.datasets.Flowers102. Install it via `pip install scipy`."
+            "scipy is required by torchvision.datasets.Flowers102. Install it via "
+            "`pip install scipy`."
         ) from exc
 
     data_root = data_root.expanduser()
@@ -269,7 +283,8 @@ def main() -> None:
     )
     if not token:
         print(
-            "A Hugging Face token is required. Run `huggingface-cli login`, set HUGGINGFACE_HUB_TOKEN, or pass --token.",
+            "A Hugging Face token is required. Run `huggingface-cli login`, set "
+            "HUGGINGFACE_HUB_TOKEN, or pass --token.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -282,7 +297,8 @@ def main() -> None:
 
     data_root = Path(args.data_root)
     print(
-        f"Downloading Oxford 102 Flowers dataset via torchvision into {data_root.expanduser()}...",
+        f"Downloading Oxford 102 Flowers dataset via torchvision into "
+        f"{data_root.expanduser()}...",
         flush=True,
     )
     try:

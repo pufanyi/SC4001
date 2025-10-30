@@ -10,7 +10,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-from distillation.scripts.utils_flowers import normalize_label
+from distillation.scripts.utils_flowers import normalize_label  # noqa: E402
 
 
 # --------------------------
@@ -49,22 +49,28 @@ You are a botanist that classifies flowers.
 Look at the provided image of a single flower or a small bunch of flowers.
 
 Your job:
-1. Carefully describe the visible characteristics: petal color, petal shape, petal arrangement, center of the flower, leaves/stem structure, and overall shape.
+1. Carefully describe the visible characteristics: petal color, petal shape,
+   petal arrangement, center of the flower, leaves/stem structure, and overall
+   shape.
 2. Use these observations to reason step by step about which flower it is.
 3. Make a final conclusion about the most likely flower type.
 
 Return ONLY valid JSON with EXACTLY these fields:
 {
-  "question": "Try to identify the type of this flower. Give me your thinking process and reasoning, then finally conclude.",
-  "reasoning": "Your detailed thinking process and reasoning in 2-6 sentences. Mention visual evidence.",
-  "final_answer": "Your final predicted flower type as a short common name (only the flower name, no extra words)."
+  "question": "Try to identify the type of this flower. Give me your thinking "
+              "process and reasoning, then finally conclude.",
+  "reasoning": "Your detailed thinking process and reasoning in 2-6 sentences. "
+               "Mention visual evidence.",
+  "final_answer": "Your final predicted flower type as a short common name "
+                  "(only the flower name, no extra words)."
 }
 
 Rules:
 - Output MUST be valid JSON.
 - Do not include any text before or after the JSON.
 - You MUST give your best guess even if you are not 100% sure.
-- Do not say 'I am not sure' or 'I cannot tell'. Always choose the most likely flower type.
+- Do not say 'I am not sure' or 'I cannot tell'. Always choose the most likely
+  flower type.
 """
 
 # --------------------------
