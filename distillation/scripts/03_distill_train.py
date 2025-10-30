@@ -187,7 +187,7 @@ def main():
 
         # ---- 4a. Call Gemini with retries and key rotation ----
         raw_text = None
-        for attempt in range(len(API_KEYS)):
+        for _attempt in range(len(API_KEYS)):
             try:
                 response = model.generate_content([PROMPT_TEXT, image])
                 raw_text = response.text
