@@ -1,0 +1,47 @@
+# Training configuration
+epochs: 100
+batch_size: 32
+num_workers: 4
+
+# Optimizer
+optimizer:
+  name: adamw
+  lr: 1.0e-4
+  weight_decay: 1.0e-4
+  betas: [0.9, 0.999]
+
+# Learning rate scheduler
+scheduler:
+  name: cosine
+  warmup_epochs: 5
+  min_lr: 1.0e-6
+
+# Device and precision
+device: cuda
+precision: fp32  # Options: fp32, fp16, bf16
+compile: false  # PyTorch 2.0 compile
+
+# Logging
+log_interval: 10  # Log every N batches
+eval_interval: 1  # Evaluate every N epochs
+
+# Checkpointing
+save_interval: 5  # Save checkpoint every N epochs
+save_best: true  # Save best model based on validation accuracy
+save_last: true  # Save last checkpoint
+
+# Early stopping (optional)
+early_stopping:
+  enabled: false
+  patience: 10
+  min_delta: 0.001
+
+# Gradient clipping
+grad_clip:
+  enabled: false
+  max_norm: 1.0
+
+# Mixed precision training
+amp:
+  enabled: false  # Automatic Mixed Precision
+

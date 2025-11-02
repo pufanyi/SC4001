@@ -24,14 +24,4 @@ logger.add(
     diagnose=True,
 )
 
-# Optional: Add file logging handler
-# logger.add(
-#     "logs/{time:YYYY-MM-DD}.log",
-#     rotation="00:00",
-#     retention="30 days",
-#     level="DEBUG",
-#     format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
-#     encoding="utf-8",
-# )
-
 __all__ = ["logger", "console"]

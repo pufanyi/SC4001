@@ -1,12 +1,23 @@
 from abc import ABC, abstractmethod
 
-from PIL import Image
+import torch
 
 
-class Model(ABC):
-    @abstractmethod
-    def __init__(self, model_name: str):
+class Model(ABC, torch.nn.Module):
+    def __init__(self, model_name: str, num_classes: int):
+        super().__init__()
         self.model_name = model_name
+        self.num_classes = num_classes
 
-    def predict(self, input: Image.Image | list[Image.Image]) -> str:
+    @abstractmethod
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Forward pass of the model.
+
+        Args:
+            x: Batched tensor of shape (B, C, H, W)
+
+        Returns:
+            logits: Tensor of shape (B, num_classes)
+        """
         raise NotImplementedError("Subclasses must implement this method")
