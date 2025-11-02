@@ -11,13 +11,4 @@ class Model(ABC, torch.nn.Module):
 
     @abstractmethod
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Forward pass of the model.
-
-        Args:
-            x: Batched tensor of shape (B, C, H, W)
-
-        Returns:
-            logits: Tensor of shape (B, num_classes)
-        """
         raise NotImplementedError("Subclasses must implement this method")

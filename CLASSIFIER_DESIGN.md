@@ -82,7 +82,7 @@ class ConvNeXtProcessor(Processor):
             transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                std=[0.229, 0.224, 0.225]),
         ])
-    
+
     def __call__(self, image: Image.Image) -> torch.Tensor:
         return self.transform(image)
 ```
@@ -173,7 +173,7 @@ class ConvNeXtModel(Model):
         self.backbone = models.convnext_tiny(pretrained=pretrained)
         # 替换分类头
         self.backbone.classifier[2] = nn.Linear(in_features, num_classes)
-    
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)
 ```
@@ -202,7 +202,7 @@ class ImageClassificationDataset(Dataset):
         self.image_paths = image_paths
         self.labels = labels
         self.processor = processor
-    
+
     def __getitem__(self, idx):
         image = Image.open(self.image_paths[idx]).convert('RGB')
         pixel_values = self.processor(image)
@@ -294,10 +294,10 @@ model = ConvNeXtModel(
 for batch in train_loader:
     images = batch['pixel_values']  # (B, C, H, W) - 已经批处理好了
     labels = batch['labels']        # (B,)
-    
+
     outputs = model(images)         # forward 接收 tensor，不是 list
     loss = criterion(outputs, labels)
-    
+
     loss.backward()
     optimizer.step()
 ```
@@ -311,11 +311,11 @@ class Model(ABC, torch.nn.Module):
     @abstractmethod
     def process_image(self, image: Image.Image) -> torch.Tensor:
         pass  # 问题：Model 不应该负责数据预处理
-    
+
     @abstractmethod
     def collate_images(self, images: list[torch.Tensor]) -> torch.Tensor:
         pass  # 问题：Model 不应该负责批处理
-    
+
     @abstractmethod
     def forward(self, images: list[torch.Tensor]) -> torch.Tensor:
         pass  # 问题：forward 应该接收 tensor，不是 list
@@ -428,4 +428,3 @@ processor:
 - 易于测试
 - 易于扩展
 - 符合行业标准
-
