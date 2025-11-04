@@ -6,7 +6,7 @@ from logger import logger
 CLASSES_PATH = Path(__file__).parent / "classes.json"
 CLASSES = json.load(open(CLASSES_PATH))
 NUM_CLASSES = len(CLASSES)
-ID2LABEL = {i: label for i, label in enumerate(CLASSES)}
+ID2LABEL = dict(enumerate(CLASSES))
 LABEL2ID = {label: i for i, label in enumerate(CLASSES)}
 
 logger.info(f"Loaded {NUM_CLASSES} classes: {CLASSES}")

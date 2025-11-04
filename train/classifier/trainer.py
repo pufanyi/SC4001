@@ -45,5 +45,5 @@ class ClassifierTrainer:
         return loss
 
     def train(self):
-        optimizer = self.create_optimizer()
-        lr_scheduler = self.create_lr_scheduler()
+        self.create_optimizer()
+        self.create_lr_scheduler()
