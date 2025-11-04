@@ -1,14 +1,14 @@
-import torch
 from omegaconf import DictConfig
-from transformers.optimization import get_wsd_schedule
+from torch.optim import AdamW
+from transformers import PreTrainedModel
 
 
-def get_optimizer(config: DictConfig, model: torch.nn.Module):
-    if config.optimizer.name == "wsd":
-        return get_wsd_schedule(
-            optimizer=optimizer,
-            num_warmup_steps=config.optimizer.num_warmup_steps,
-            num_training_steps=config.optimizer.num_training_steps,
+def get_optimizer(config: DictConfig, model: PreTrainedModel):
+    if config.trainer.optimizer.name == "adamw":
+        return AdamW(
+            model.parameters(),
+            lr=config.trainer.learning_rate,
+            weight_decay=config.trainer.weight_decay,
         )
     else:
-        raise ValueError(f"Unknown optimizer: {config.optimizer.name}")
+        raise ValueError(f"Unknown optimizer: {config.trainer.name}")

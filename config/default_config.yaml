@@ -1,7 +1,6 @@
 model:
   name: convnext_tiny
   pretrained: true
-
 processor:
   name: convnextv2_huge_22k_384
   train:
@@ -25,3 +24,13 @@ processor:
     erasing_prob: 0.25
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
+trainer:
+  learning_rate: 1.0e-6
+  optimizer:
+    name: adamw
+    weight_decay: 1.0e-6
+  lr_scheduler:
+    name: wsd
+    num_warmup_steps: 10
+    num_decay_steps: 10
+    num_training_steps: 100

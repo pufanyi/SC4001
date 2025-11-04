@@ -5,18 +5,18 @@ from transformers.optimization import get_cosine_schedule_with_warmup, get_wsd_s
 
 
 def get_lr_scheduler(config: DictConfig, optimizer: torch.optim.Optimizer) -> LambdaLR:
-    if config.lr_scheduler.name == "cosine":
+    if config.trainer.lr_scheduler.name == "cosine":
         return get_cosine_schedule_with_warmup(
             optimizer=optimizer,
-            num_warmup_steps=config.lr_scheduler.num_warmup_steps,
-            num_training_steps=config.num_training_steps,
+            num_warmup_steps=config.trainer.lr_scheduler.num_warmup_steps,
+            num_training_steps=config.trainer.lr_scheduler.num_training_steps,
         )
-    elif config.lr_scheduler.name == "wsd":
+    elif config.trainer.lr_scheduler.name == "wsd":
         return get_wsd_schedule(
             optimizer=optimizer,
-            num_warmup_steps=config.lr_scheduler.num_warmup_steps,
-            num_decay_steps=config.lr_scheduler.num_decay_steps,
-            num_training_steps=config.num_training_steps,
+            num_warmup_steps=config.trainer.lr_scheduler.num_warmup_steps,
+            num_decay_steps=config.trainer.lr_scheduler.num_decay_steps,
+            num_training_steps=config.trainer.lr_scheduler.num_training_steps,
         )
     else:
-        raise ValueError(f"Unknown scheduler: {config.lr_scheduler.name}")
+        raise ValueError(f"Unknown scheduler: {config.trainer.lr_scheduler.name}")

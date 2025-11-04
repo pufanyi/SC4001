@@ -1,13 +1,14 @@
 from omegaconf import DictConfig
-from transformers import AutoImageProcessor, BaseImageProcessor
 from torchvision import transforms
+from transformers import AutoImageProcessor, BaseImageProcessor
+
 
 class ProcessorFactory:
     @staticmethod
     def get_processor(config: DictConfig) -> BaseImageProcessor:
         processor_name = config.processor.name
         return AutoImageProcessor.from_pretrained(processor_name)
-    
+
     @staticmethod
     def get_train_processor(config: DictConfig) -> transforms.Compose:
         inference_processor = ProcessorFactory.get_processor(config)
@@ -27,9 +28,13 @@ class ProcessorFactory:
         )
 
         if config.processor.train.hflip_prob > 0:
-            transform_list.append(transforms.RandomHorizontalFlip(p=config.processor.train.hflip_prob))
+            transform_list.append(
+                transforms.RandomHorizontalFlip(p=config.processor.train.hflip_prob)
+            )
         if config.processor.train.vflip_prob > 0:
-            transform_list.append(transforms.RandomVerticalFlip(p=config.processor.train.vflip_prob))
+            transform_list.append(
+                transforms.RandomVerticalFlip(p=config.processor.train.vflip_prob)
+            )
 
         if config.processor.train.rotation_degrees > 0:
             transform_list.append(
@@ -60,12 +65,18 @@ class ProcessorFactory:
             )
 
         if config.processor.train.grayscale_prob > 0:
-            transform_list.append(transforms.RandomGrayscale(p=config.processor.train.grayscale_prob))
+            transform_list.append(
+                transforms.RandomGrayscale(p=config.processor.train.grayscale_prob)
+            )
 
         if config.processor.train.blur_prob > 0:
             transform_list.append(
                 transforms.RandomApply(
-                    [transforms.GaussianBlur(kernel_size=23, sigma=config.processor.train.blur_sigma)],
+                    [
+                        transforms.GaussianBlur(
+                            kernel_size=23, sigma=config.processor.train.blur_sigma
+                        )
+                    ],
                     p=config.processor.train.blur_prob,
                 )
             )
