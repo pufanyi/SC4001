@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any
+import os
 
 import torch
 from PIL import Image
@@ -10,24 +10,14 @@ class Processor(ABC):
         self.name = name
 
     @abstractmethod
-    def __call__(self, image: Image.Image) -> torch.Tensor:
+    def __call__(self, images: list[Image.Image]) -> dict:
         """
-        Process a single image.
+        Process a list of images.
 
         Args:
-            image: PIL Image in RGB format
+            images: List of PIL Images in RGB format
 
         Returns:
-            tensor: Preprocessed image tensor of shape (C, H, W)
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @abstractmethod
-    def get_config(self) -> dict[str, Any]:
-        """
-        Get processor configuration for logging and reproducibility.
-
-        Returns:
-            config: Dictionary containing processor parameters
+            tensor: Preprocessed images tensor of shape (B, C, H, W)
         """
         raise NotImplementedError("Subclasses must implement this method")

@@ -16,5 +16,5 @@ class ConvNeXtV2(Model):
             model_name, num_labels=num_classes
         )
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.model(x).logits
+    def forward(self, **kwargs):
+        return self.model.forward(**kwargs)
