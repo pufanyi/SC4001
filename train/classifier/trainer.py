@@ -26,7 +26,7 @@ class ClassifierTrainer:
 
     def create_lr_scheduler(self) -> LambdaLR:
         return get_lr_scheduler(self.config, self.optimizer)
-    
+
     def get_cast_type(self) -> torch.dtype:
         if self.config.trainer.cast_type == "bf16":
             return torch.bfloat16
@@ -36,7 +36,7 @@ class ClassifierTrainer:
             return torch.float32
         else:
             raise ValueError(f"Unknown cast type: {self.config.trainer.cast_type}")
-    
+
     def compute_loss(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         cast_type = self.get_cast_type()
         with torch.autocast(device_type="cuda", dtype=cast_type):
