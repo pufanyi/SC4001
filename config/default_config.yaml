@@ -34,3 +34,4 @@ trainer:
     num_warmup_steps: 10
     num_decay_steps: 10
     num_training_steps: 100
+  cast_type: bf16
