@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
-import os
 
-import torch
 from PIL import Image
 
 

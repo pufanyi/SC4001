@@ -1,6 +1,8 @@
-from classifier.models import Model
-from classifier.data.dataset import HFDataset
 from omegaconf import DictConfig
+
+from classifier.data.dataset import HFDataset
+from classifier.models import Model
+
 
 class ClassifierTrainer:
     def __init__(
@@ -14,9 +16,9 @@ class ClassifierTrainer:
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.config = config
-    
+
     def create_optimizer(self):
         pass
-    
+
     def train(self):
         pass

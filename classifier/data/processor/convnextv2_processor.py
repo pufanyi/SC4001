@@ -1,10 +1,6 @@
-from typing import Any
-
-import torch
 from PIL import Image
-from transformers import AutoImageProcessor
 from torchvision import transforms
-import os
+from transformers import AutoImageProcessor
 
 from .processor import Processor
 
@@ -16,12 +12,12 @@ class ConvNeXtV2Processor(Processor):
     ):
         super().__init__(name="convnextv2_processor")
         self.processor_name = processor_name
-        
+
         self.hf_processor = AutoImageProcessor.from_pretrained(processor_name)
 
     def __call__(self, images: list[Image.Image]) -> dict:
         return self.hf_processor(images, return_tensors="pt")
-    
+
 
 class ConvNeXtTrainProcessor(Processor):
     def __init__(
@@ -50,22 +46,24 @@ class ConvNeXtTrainProcessor(Processor):
     ):
         super().__init__(name="convnextv2_train_processor")
         self.processor_name = processor_name
-        
+
         self.hf_processor = AutoImageProcessor.from_pretrained(processor_name)
-        
+
         self.image_size = self.hf_processor.size.get("shortest_edge", 384)
         if isinstance(self.image_size, dict):
             self.image_size = self.image_size.get("height", 384)
-        
+
         self.image_mean = self.hf_processor.image_mean
         self.image_std = self.hf_processor.image_std
         self.resample = getattr(
-            transforms.InterpolationMode, 
-            self.hf_processor.resample.name if hasattr(self.hf_processor.resample, 'name') else 'BICUBIC'
+            transforms.InterpolationMode,
+            self.hf_processor.resample.name
+            if hasattr(self.hf_processor.resample, "name")
+            else "BICUBIC",
         )
-        
+
         transform_list = []
-        
+
         transform_list.append(
             transforms.RandomResizedCrop(
                 size=self.image_size,
@@ -74,12 +72,12 @@ class ConvNeXtTrainProcessor(Processor):
                 interpolation=self.resample,
             )
         )
-        
+
         if hflip_prob > 0:
             transform_list.append(transforms.RandomHorizontalFlip(p=hflip_prob))
         if vflip_prob > 0:
             transform_list.append(transforms.RandomVerticalFlip(p=vflip_prob))
-        
+
         if rotation_degrees > 0:
             transform_list.append(
                 transforms.RandomRotation(
@@ -88,7 +86,7 @@ class ConvNeXtTrainProcessor(Processor):
                     fill=0,
                 )
             )
-        
+
         if use_randaugment:
             transform_list.append(
                 transforms.RandAugment(
@@ -97,7 +95,7 @@ class ConvNeXtTrainProcessor(Processor):
                     interpolation=transforms.InterpolationMode.BILINEAR,
                 )
             )
-        
+
         if use_color_jitter:
             transform_list.append(
                 transforms.ColorJitter(
@@ -107,10 +105,10 @@ class ConvNeXtTrainProcessor(Processor):
                     hue=hue,
                 )
             )
-        
+
         if grayscale_prob > 0:
             transform_list.append(transforms.RandomGrayscale(p=grayscale_prob))
-        
+
         if blur_prob > 0:
             transform_list.append(
                 transforms.RandomApply(
@@ -118,28 +116,28 @@ class ConvNeXtTrainProcessor(Processor):
                     p=blur_prob,
                 )
             )
-        
+
         transform_list.append(transforms.ToTensor())
-        
+
         transform_list.append(
             transforms.Normalize(
                 mean=self.image_mean,
                 std=self.image_std,
             )
         )
-        
+
         if use_random_erasing:
             transform_list.append(
                 transforms.RandomErasing(
                     p=erasing_prob,
                     scale=erasing_scale,
                     ratio=erasing_ratio,
-                    value='random',
+                    value="random",
                 )
             )
-        
+
         self.transform = transforms.Compose(transform_list)
-        
+
         self.config = {
             "processor_name": processor_name,
             "image_size": self.image_size,
@@ -165,9 +163,8 @@ class ConvNeXtTrainProcessor(Processor):
         }
 
     def __call__(self, images: list[Image.Image]) -> dict:
-        images = [image.convert('RGB') for image in images if image.mode != 'RGB']
-        
+        images = [image.convert("RGB") for image in images if image.mode != "RGB"]
+
         return {
-            'pixel_values': self.transform(images),
+            "pixel_values": self.transform(images),
         }
-    
