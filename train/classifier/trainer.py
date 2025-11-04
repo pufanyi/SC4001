@@ -73,7 +73,7 @@ def fsdp2_load_full_state_dict(
     set_model_state_dict(model, full_state, options=options)
 
     # rotary_emb is not in state_dict, so we need to broadcast it manually
-    for name, buf in model.named_buffers():
+    for _name, buf in model.named_buffers():
         dist.broadcast(buf, src=0)
 
     if cpu_offload:
@@ -114,10 +114,10 @@ class ClassifierTrainer:
             param_type=param_type, reduction_type=reduct_type, output_type=output_type
         )
         reshard_after_forward = self.config.trainer.reshard_after_forward
-        fsdp_config = dict(
-            mp_policy=mp_policy,
-            reshard_after_forward=reshard_after_forward,
-        )
+        fsdp_config = {
+            "mp_policy": mp_policy,
+            "reshard_after_forward": reshard_after_forward,
+        }
         full_state = self.model.state_dict()
         logger.info("Applying FSDP2 to model")
         transformer_cls_names_to_wrap = (
