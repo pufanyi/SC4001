@@ -1,6 +1,4 @@
-"""Constants for Oxford Flowers training."""
-
-FLOWER_CLASSES = [
+[
     "pink primrose",
     "hard-leaved pocket orchid",
     "canterbury bells",
@@ -102,10 +100,5 @@ FLOWER_CLASSES = [
     "bromelia",
     "blanket flower",
     "trumpet creeper",
-    "blackberry lily",
+    "blackberry lily"
 ]
-
-DEFAULT_INSTRUCTION = (
-    "Identify the flower species shown in the picture from the Oxford 102 dataset. "
-    "Respond with the exact class name."
-)
