@@ -1,5 +1,5 @@
 model:
-  name: convnext_tiny
+  name: convnextv2_huge_22k_384
   pretrained: true
 processor:
   name: convnextv2_huge_22k_384
@@ -40,3 +40,10 @@ trainer:
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
+  num_steps: 10000
+  eval_steps: 1000
+  save_steps: 1000
+  save_total_limit: 10
+  logging_steps: 10
+  report_to: wandb
+  grad_norm_clip: 1.0

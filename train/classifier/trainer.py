@@ -14,7 +14,9 @@ from transformers import PreTrainedModel
 from classifier.data.dataset import HFDataset
 from train.optimizer.get_lr_scheduler import get_lr_scheduler
 from train.optimizer.get_optimizer import get_optimizer
+from accelerate.utils import send_to_device
 
+from tqdm import tqdm
 
 # Adapted from https://github.com/EvolvingLMMs-Lab/lmms-engine/blob/main/src/lmms_engine/utils/fsdp2_utils.py
 def apply_fsdp2(
@@ -94,6 +96,7 @@ class ClassifierTrainer:
         self.train_dataset = train_dataset
         self.val_dataset = val_dataset
         self.config = config
+        self.global_step = 0
 
     def create_optimizer_and_lr_scheduler(self):
         self.optimizer = get_optimizer(self.config, self.model)
@@ -102,7 +105,7 @@ class ClassifierTrainer:
     def compute_loss(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
         cast_type = getattr(torch, self.config.trainer.precision.param_type)
         with torch.autocast(device_type="cuda", dtype=cast_type):
-            outputs = self.model(**batch)
+            outputs = self.fsdp2_model(**batch)
             loss = outputs["loss"]
         return loss
 
@@ -131,6 +134,83 @@ class ClassifierTrainer:
         del full_state
         gc.collect()
         torch.cuda.empty_cache()
+    
+    def should_stop(self):
+        return self.global_step >= self.config.trainer.num_steps
+    
+    def eval(self):
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        self.fsdp2_model.eval()
+        total_loss = 0
+        for batch in self.val_dataset:
+            batch = send_to_device(batch, device=torch.cuda.current_device())
+            with torch.no_grad():
+                loss = self.compute_loss(batch)
+                total_loss += loss.item()
+        final_loss = total_loss / len(self.val_dataset)
+        logger.info(f"Step {self.global_step} evaluation loss: {final_loss}")
+        return final_loss
+    
+    def save_model(self):
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        output_dir = Path(self.config.trainer.output_dir) / f"step_{self.global_step}"
+        if rank == 0:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        model_path = output_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
+        optimizer_path = output_dir / "optimizer" / f"ws_{world_size}_rank_{rank}.pt"
+        extra_state_path = output_dir / "extra_state" / f"ws_{world_size}_rank_{rank}.pt"
+        dataloader_state_path = output_dir / "dataloader_state" / f"ws_{world_size}_rank_{rank}.pt"
+        if rank == 0:
+            model_path.parent.mkdir(parents=True, exist_ok=True)
+            optimizer_path.parent.mkdir(parents=True, exist_ok=True)
+            extra_state_path.parent.mkdir(parents=True, exist_ok=True)
+            dataloader_state_path.parent.mkdir(parents=True, exist_ok=True)
+        dist.barrier()
+        torch.save(self.fsdp2_model.state_dict(), model_path)
+        torch.save(self.optimizer.state_dict(), optimizer_path)
+        torch.save(self.extra_state, extra_state_path)
+        torch.save(self.dataloader_state, dataloader_state_path)
+
 
     def train(self):
+        self.prepare_model()
         self.create_optimizer_and_lr_scheduler()
+        num_steps = self.config.trainer.num_steps
+        rank = dist.get_rank()
+        world_size = dist.get_world_size()
+        epoch = 0
+        self.global_step = 0
+        pbar = tqdm(total=num_steps, desc="Training", disable=rank != 0)
+        while not self.should_stop():
+            for batch in self.train_dataset:
+                if self.should_stop():
+                    break
+                batch = send_to_device(batch, device=torch.cuda.current_device())
+                self.fsdp2_model.train()
+                self.optimizer.zero_grad()
+                loss = self.compute_loss(batch)
+                if dist.get_world_size() > 1:
+                    loss = loss.mean()
+                loss_item = loss.item()
+                loss.backward()
+                grad_norm = torch.nn.utils.clip_grad_norm_(self.fsdp2_model.parameters(), self.config.trainer.grad_norm_clip)
+                if torch.isfinite(grad_norm):
+                    self.optimizer.step()
+                else:
+                    logger.warning(f"Step {self.global_step} gradient norm is not finite, skipping optimizer step")
+                    self.optimizer.zero_grad()
+                self.lr_scheduler.step()
+                lr = self.lr_scheduler.get_last_lr()[0]
+                loss_item = torch.tensor(loss_item, device=torch.cuda.current_device())
+                torch.distributed.all_reduce(loss_item, op=torch.distributed.ReduceOp.AVG)
+                self.global_step += 1
+                logger.info(f"Step {self.global_step} training loss: {loss_item.item()}")
+                if self.global_step % self.config.trainer.eval_steps == 0:
+                    self.eval()
+                if self.global_step % self.config.trainer.save_steps == 0:
+                    self.save_model()
+                pbar.update(1)
+
+        pbar.close()
