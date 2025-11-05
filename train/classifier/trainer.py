@@ -176,7 +176,7 @@ class ClassifierTrainer:
     def save_model(self):
         rank = _get_rank()
         world_size = _get_world_size()
-        output_dir = Path(self.config.trainer.output_dir) / f"step_{self.global_step}"
+        output_dir = Path(self.config.trainer.get("output_dir", "outputs")) / f"step_{self.global_step}"
         if rank == 0:
             output_dir.mkdir(parents=True, exist_ok=True)
         model_path = output_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
