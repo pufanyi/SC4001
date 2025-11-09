@@ -163,24 +163,44 @@ class ClassifierTrainer:
 
     def eval(self):
         rank = _get_rank()
+        world_size = _get_world_size()
         self.fsdp2_model.eval()
-        total_loss = 0
+        total_loss = 0.0
         total_batches = 0
-        num_samples = len(self.val_dataloader.dataset)
         num_correct = 0
+        num_samples = 0
+        
         for batch in self.val_dataloader:
             batch = send_to_device(batch, device=torch.cuda.current_device())
+            batch_size = batch["labels"].size(0)
+            num_samples += batch_size
+            
             with torch.no_grad():
                 outputs, loss = self.compute_loss(batch)
-                total_loss += loss.item()
+                total_loss += loss.item() * batch_size  # weight by batch size
                 total_batches += 1
                 preds = outputs["logits"].argmax(dim=-1)
                 num_correct += (preds == batch["labels"]).sum().item()
-        final_loss = total_loss / max(total_batches, 1)
-        accuracy = num_correct / num_samples
+        
+        # Synchronize metrics across all ranks in distributed training
+        if world_size > 1:
+            # Convert to tensors for all_reduce
+            metrics_tensor = torch.tensor(
+                [total_loss, num_correct, num_samples], 
+                dtype=torch.float32,
+                device=torch.cuda.current_device()
+            )
+            all_reduce(metrics_tensor, op=ReduceOp.SUM)
+            total_loss, num_correct, num_samples = metrics_tensor.tolist()
+        
+        # Calculate global metrics
+        final_loss = total_loss / max(num_samples, 1)
+        accuracy = num_correct / max(num_samples, 1)
+        
         if rank == 0:
-            logger.info(f"Step {self.global_step} evaluation loss: {final_loss}, accuracy: {accuracy}")
+            logger.info(f"Step {self.global_step} evaluation loss: {final_loss:.4f}, accuracy: {accuracy:.4f}")
             self._log({"eval/loss": final_loss, "eval/accuracy": accuracy})
+        
         return final_loss
 
     def save_model(self):
@@ -479,7 +499,12 @@ class ClassifierTrainer:
                     if rank == 0 and self.global_step % self.config.trainer.logging_steps == 0:
                         self._log(metrics)
                     if self.global_step % self.config.trainer.eval_steps == 0:
+                        if dist.is_available() and dist.is_initialized():
+                            dist.barrier()
                         self.eval()
+                        if dist.is_available() and dist.is_initialized():
+                            dist.barrier()
+                        self.fsdp2_model.train()  # Set back to train mode
                     if rank == 0 and self.global_step % self.config.trainer.save_steps == 0:
                         self.save_model()
                     pbar.update(1)
