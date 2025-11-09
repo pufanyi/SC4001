@@ -1,0 +1,61 @@
+defaults:
+  - dataset: flowers102
+  - _self_
+model:
+  name: facebook/convnextv2-huge-22k-384
+  pretrained: true
+processor:
+  name: facebook/convnextv2-huge-22k-384
+  train:
+    use_randaugment: true
+    randaugment_n: 2
+    randaugment_m: 9
+    scale: [0.5, 1.0]
+    ratio: [0.75, 1.33]
+    hflip_prob: 0.5
+    vflip_prob: 0.1
+    rotation_degrees: 15
+    use_color_jitter: true
+    brightness: 0.4
+    contrast: 0.4
+    saturation: 0.4
+    hue: 0.2
+    grayscale_prob: 0.1
+    blur_prob: 0.2
+    blur_sigma: [0.1, 2.0]
+    use_random_erasing: true
+    erasing_prob: 0.25
+    erasing_scale: [0.02, 0.33]
+    erasing_ratio: [0.3, 3.3]
+trainer:
+  train_batch_size: 32
+  eval_batch_size: 128
+  dataloader_num_workers: 16
+  learning_rate: 1.0e-5
+  optimizer:
+    name: adamw
+    weight_decay: 1.0e-5
+  lr_scheduler:
+    name: wsd
+    num_warmup_rate: 0.05
+    num_decay_steps: 18
+  precision:
+    param_type: bfloat16
+    reduction_type: float32
+    output_type: bfloat16
+  reshard_after_forward: false
+  transformer_cls_names_to_wrap: null
+  num_steps: 1000
+  eval_steps: 100
+  save_steps: 100
+  save_total_limit: 10
+  logging_steps: 1
+  report_to: wandb
+  grad_norm_clip: 1.0
+  output_dir: outputs/convnextv2-huge-22k-384
+  resume_from_checkpoint: null
+  wandb_project: sc4001
+  wandb_entity: pufanyi
+  wandb_run_name: null
+  wandb_run_id: null
+  wandb_tags: []
