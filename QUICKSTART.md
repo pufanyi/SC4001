@@ -1,42 +1,42 @@
-# 快速开始指南
+# Quick Start Guide
 
-## 📋 前置条件
+## 📋 Prerequisites
 
 ```bash
-# 已安装的依赖（参考 pyproject.toml）
+# Installed dependencies (see pyproject.toml)
 pip install torch torchvision datasets hydra-core loguru rich
 ```
 
-## 🚀 5 分钟快速开始
+## 🚀 5-Minute Quick Start
 
-### 1. 查看示例代码
+### 1. View Example Code
 
 ```bash
-# 运行示例脚本，了解各个组件如何工作
+# Run the example script to understand how each component works
 python -m classifier.example_usage
 ```
 
-这会展示：
-- ✅ Processor 如何处理单个图像
-- ✅ Collator 如何批处理
-- ✅ Model 如何进行推理
-- ✅ 组件如何协同工作
+This will demonstrate:
+- ✅ How the Processor handles a single image
+- ✅ How the Collator batches data
+- ✅ How the Model performs inference
+- ✅ How the components work together
 
-### 2. 开始训练
+### 2. Start Training
 
-#### 默认配置训练
+#### Training with Default Configuration
 
 ```bash
 python -m classifier.train
 ```
 
-这会使用默认配置：
-- 数据集: Flowers102
-- 模型: ConvNeXt Tiny
+This will use the default configuration:
+- Dataset: Flowers102
+- Model: ConvNeXt Tiny
 - Batch size: 32
 - Epochs: 100
 
-#### 快速调试（使用少量数据）
+#### Quick Debugging (with a small amount of data)
 
 ```bash
 python -m classifier.train \
@@ -46,96 +46,96 @@ python -m classifier.train \
     trainer.log_interval=1
 ```
 
-#### 自定义配置
+#### Custom Configuration
 
 ```bash
-# 使用更大的模型
+# Use a larger model
 python -m classifier.train model=convnext_small
 
-# 使用 ViT Base 预设（脚本会自动激活 .venv）
+# Use the ViT Base preset (the script will automatically activate .venv)
 ./scripts/train/vit.sh \
     trainer.train_batch_size=32 \
     trainer.learning_rate=3e-5
 
-# 调整超参数
+# Adjust hyperparameters
 python -m classifier.train \
     trainer.batch_size=64 \
     trainer.optimizer.lr=5e-4 \
     trainer.epochs=50
 
-# 修改数据增强
+# Modify data augmentation
 python -m classifier.train \
     model.train_processor.hflip_prob=0.8 \
     model.train_processor.color_jitter=false
 ```
 
-### 3. 查看结果
+### 3. View Results
 
-训练输出保存在 `outputs/YYYY-MM-DD/HH-MM-SS/`:
+Training outputs are saved in `outputs/YYYY-MM-DD/HH-MM-SS/`:
 
 ```
 outputs/2024-01-01/12-00-00/
-├── config.yaml          # 完整配置
-├── best_model.pth      # 最佳模型
-└── last_model.pth      # 最后的模型
+├── config.yaml          # Full configuration
+├── best_model.pth      # Best model
+└── last_model.pth      # Last model
 ```
 
-加载模型:
+Load a model:
 
 ```python
 import torch
 from classifier.models import ConvNeXtModel
 
-# 创建模型
+# Create the model
 model = ConvNeXtModel("convnext_tiny", num_classes=102)
 
-# 加载权重
+# Load weights
 checkpoint = torch.load("outputs/.../best_model.pth")
 model.load_state_dict(checkpoint['model_state_dict'])
 model.eval()
 ```
 
-### 4. 进行评测
+### 4. Run Evaluation
 
 ```bash
-# 单卡评测多个检查点（支持任意数量，使用 -- 分隔额外 Hydra 参数）
+# Single-GPU evaluation of multiple checkpoints (supports any number, use -- to separate extra Hydra parameters)
 ./scripts/eval/single.sh \
     outputs/resnet152_lr1e-5/step_300 \
     outputs/resnet152_lr1e-5/step_400 \
     -- evaluation.split=test evaluation.metrics_output_path=outputs/test_metrics.json
 
-# 分布式评测（FSDP 检查点需与训练 world size 相同）
+# Distributed evaluation (FSDP checkpoints require the same world size as training)
 NPROC_PER_NODE=4 ./scripts/eval/distributed.sh \
     outputs/resnet152_lr1e-5/step_500 \
     outputs/resnet152_lr1e-5/step_450 \
     -- evaluation.topk=[1,3,5]
 
-# 仍可直接调用 Hydra 入口（无脚本场景）
+# You can still call the Hydra entry point directly (for non-scripted scenarios)
 python -m eval.pipeline.run evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500
 ```
 
-- `evaluation.split`：`train` / `validation` / `test` 或任意 HF split；默认 `validation`。
-- `evaluation.max_samples`：限制样本数量，可加速抽查。
-- `evaluation.metrics_output_path`：提供 JSON 路径即可自动写出指标。
-- `CHECKPOINT_FORMAT` 环境变量控制脚本加载方式（单卡默认 auto，多卡默认 fsdp）。
-- 使用 FSDP 分片权重时，`torchrun` 评测的 `NPROC_PER_NODE` 必须与训练一致。
+- `evaluation.split`: `train` / `validation` / `test` or any HF split; defaults to `validation`.
+- `evaluation.max_samples`: Limits the number of samples for quick checks.
+- `evaluation.metrics_output_path`: Provide a JSON path to automatically write out metrics.
+- The `CHECKPOINT_FORMAT` environment variable controls how the script loads checkpoints (defaults to `auto` for single-GPU, `fsdp` for multi-GPU).
+- When using FSDP sharded weights, the `NPROC_PER_NODE` for `torchrun` evaluation must match the training.
 
-## 📚 配置说明
+## 📚 Configuration Details
 
-### 数据集配置 (`dataset=...`)
+### Dataset Configuration (`dataset=...`)
 
-在 `classifier/conf/dataset/` 中定义：
+Defined in `classifier/conf/dataset/`:
 
 ```yaml
 # flowers102.yaml
 dataset_id: pufanyi/flowers102
 num_classes: 102
-max_train_samples: null  # 限制训练样本数（调试用）
+max_train_samples: null  # Limit the number of training samples (for debugging)
 ```
 
-### 模型配置 (`model=...`)
+### Model Configuration (`model=...`)
 
-在 `classifier/conf/model/` 中定义：
+Defined in `classifier/conf/model/`:
 
 ```yaml
 # convnext_tiny.yaml
@@ -153,9 +153,9 @@ train_processor:
   color_jitter: true
 ```
 
-### 训练配置 (`trainer.*`)
+### Trainer Configuration (`trainer.*`)
 
-在 `classifier/conf/trainer/default.yaml` 中定义：
+Defined in `classifier/conf/trainer/default.yaml`:
 
 ```yaml
 epochs: 100
@@ -172,11 +172,11 @@ scheduler:
   warmup_epochs: 5
 ```
 
-## 🎯 常见任务
+## 🎯 Common Tasks
 
-### 任务 1：添加新的数据集
+### Task 1: Add a New Dataset
 
-1. 创建配置文件 `classifier/conf/dataset/my_dataset.yaml`:
+1. Create a configuration file `classifier/conf/dataset/my_dataset.yaml`:
 
 ```yaml
 name: my_dataset
@@ -191,68 +191,68 @@ image_column: image
 label_column: label
 ```
 
-2. 运行训练:
+2. Run training:
 
 ```bash
 python -m classifier.train dataset=my_dataset
 ```
 
-### 任务 2：调整数据增强
+### Task 2: Adjust Data Augmentation
 
 ```bash
-# 更激进的增强
+# More aggressive augmentation
 python -m classifier.train \
     model.train_processor.scale=[0.5,1.0] \
     model.train_processor.hflip_prob=0.8 \
     model.train_processor.color_jitter=true
 
-# 关闭增强
+# Disable augmentation
 python -m classifier.train \
     model.train_processor.hflip_prob=0.0 \
     model.train_processor.color_jitter=false
 ```
 
-### 任务 3：修改优化器设置
+### Task 3: Modify Optimizer Settings
 
 ```bash
-# 使用更大的学习率
+# Use a larger learning rate
 python -m classifier.train trainer.optimizer.lr=1e-3
 
-# 修改学习率调度
+# Modify the learning rate scheduler
 python -m classifier.train \
     trainer.scheduler.warmup_epochs=10 \
     trainer.scheduler.min_lr=1e-7
 ```
 
-### 任务 4：使用不同的模型大小
+### Task 4: Use a Different Model Size
 
 ```bash
 # ConvNeXt Small
 python -m classifier.train model=convnext_small
 
-# ConvNeXt Base (需要更多显存)
+# ConvNeXt Base (requires more GPU memory)
 python -m classifier.train model=convnext_base trainer.batch_size=16
 ```
 
-### 任务 5：恢复训练
+### Task 5: Resume Training
 
 ```python
-# 在 Python 脚本中
+# In a Python script
 checkpoint = torch.load("outputs/.../checkpoint_epoch_50.pth")
 model.load_state_dict(checkpoint['model_state_dict'])
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 start_epoch = checkpoint['epoch']
 best_acc = checkpoint['best_acc']
 
-# 然后继续训练...
+# Then continue training...
 ```
 
-## 🔧 开发和调试
+## 🔧 Development and Debugging
 
-### 快速测试流水线
+### Quick Pipeline Test
 
 ```bash
-# 使用 10 个样本快速测试
+# Quick test with 10 samples
 python -m classifier.train \
     dataset.max_train_samples=10 \
     dataset.max_val_samples=5 \
@@ -261,46 +261,46 @@ python -m classifier.train \
     trainer.num_workers=0
 ```
 
-### 查看配置
+### View Configuration
 
 ```bash
-# Hydra 会打印完整的合并后的配置
+# Hydra will print the full, merged configuration
 python -m classifier.train --cfg job
 ```
 
-### 覆盖输出目录
+### Override Output Directory
 
 ```bash
 python -m classifier.train output_dir=my_experiment
 ```
 
-## 📖 更多资源
+## 📖 More Resources
 
-- **详细文档**: `classifier/README.md`
-- **设计文档**: `CLASSIFIER_DESIGN.md`
-- **示例代码**: `classifier/example_usage.py`
-- **配置文件**: `classifier/conf/`
+- **Detailed Documentation**: `classifier/README.md`
+- **Design Document**: `CLASSIFIER_DESIGN.md`
+- **Example Code**: `classifier/example_usage.py`
+- **Configuration Files**: `classifier/conf/`
 
-## ❓ 常见问题
+## ❓ Frequently Asked Questions
 
 ### Q: CUDA out of memory
 
 ```bash
-# 减小 batch size
+# Reduce the batch size
 python -m classifier.train trainer.batch_size=16
 
-# 或使用梯度累积
+# Or use gradient accumulation
 python -m classifier.train trainer.batch_size=8 trainer.gradient_accumulation_steps=4
 ```
 
-### Q: 数据加载太慢
+### Q: Data loading is too slow
 
 ```bash
-# 增加 workers
+# Increase the number of workers
 python -m classifier.train trainer.num_workers=8
 ```
 
-### Q: 想要使用自己的图像
+### Q: How to use my own images?
 
 ```python
 from classifier.data import ImageClassificationDataset
@@ -314,12 +314,12 @@ dataset = ImageClassificationDataset(
 )
 ```
 
-## 🎉 开始探索
+## 🎉 Start Exploring
 
-现在你已经准备好了！开始训练你的模型吧：
+Now you're all set! Start training your model:
 
 ```bash
 python -m classifier.train
 ```
 
-祝训练愉快！ 🚀
+Happy training! 🚀

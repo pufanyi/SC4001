@@ -1,63 +1,63 @@
-# Classifier 训练框架设计文档
+# Classifier Training Framework Design Document
 
-## 设计概述
+## Design Overview
 
-本框架采用**职责分离**的设计原则，将训练流程中的不同职责清晰地分配到不同的组件中。
+This framework adopts the **separation of responsibilities** design principle, clearly assigning different responsibilities in the training process to different components.
 
-## 核心设计原则
+## Core Design Principles
 
-### 1. 单一职责原则（Single Responsibility Principle）
+### 1. Single Responsibility Principle
 
-每个组件只负责一件事情：
+Each component is responsible for only one thing:
 
 ```
 ┌─────────────┐
-│  Processor  │  职责：单个样本的预处理（transform）
-└─────────────┘  ❌ 不负责：批处理、模型推理
+│  Processor  │  Responsibility: Preprocessing a single sample (transform)
+└─────────────┘  ❌ Not responsible for: batching, model inference
 
 ┌─────────────┐
-│  Collator   │  职责：批处理（batching）
-└─────────────┘  ❌ 不负责：单样本预处理、模型推理
+│  Collator   │  Responsibility: Batching
+└─────────────┘  ❌ Not responsible for: single sample preprocessing, model inference
 
 ┌─────────────┐
-│    Model    │  职责：前向传播（forward pass）
-└─────────────┘  ❌ 不负责：数据预处理、批处理
+│    Model    │  Responsibility: Forward pass
+└─────────────┘  ❌ Not responsible for: data preprocessing, batching
 
 ┌─────────────┐
-│   Dataset   │  职责：数据索引和加载
-└─────────────┘  ❌ 不负责：批处理（由 DataLoader + Collator 完成）
+│   Dataset   │  Responsibility: Data indexing and loading
+└─────────────┘  ❌ Not responsible for: batching (done by DataLoader + Collator)
 ```
 
-### 2. 符合 PyTorch 生态
+### 2. Conformance with the PyTorch Ecosystem
 
-遵循 PyTorch 的标准模式：
+Follows the standard PyTorch pattern:
 
 ```python
-# 标准 PyTorch 训练流程
-for batch in dataloader:  # DataLoader 使用 collate_fn 批处理
-    images = batch['pixel_values']  # 已经是 batched tensor
-    outputs = model(images)  # forward 接收 tensor，不是 list
+# Standard PyTorch training loop
+for batch in dataloader:  # DataLoader uses collate_fn for batching
+    images = batch['pixel_values']  # Already a batched tensor
+    outputs = model(images)  # forward accepts a tensor, not a list
     loss = criterion(outputs, labels)
     loss.backward()
     optimizer.step()
 ```
 
-## 组件详细设计
+## Component Detailed Design
 
-### 1. Processor（处理器）
+### 1. Processor
 
-**位置**: `classifier/data/processor.py`
+**Location**: `classifier/data/processor.py`
 
-**职责**:
-- 单个样本的预处理
-- 图像 resize, crop, normalize
-- 转换为 tensor
+**Responsibility**:
+- Preprocessing a single sample
+- Image resize, crop, normalize
+- Convert to tensor
 
-**不负责**:
-- 批处理（batching）
-- 数据加载
+**Not responsible for**:
+- Batching
+- Data loading
 
-**接口设计**:
+**Interface Design**:
 ```python
 class Processor(ABC):
     @abstractmethod
@@ -71,7 +71,7 @@ class Processor(ABC):
         pass
 ```
 
-**实现示例**:
+**Implementation Example**:
 ```python
 class ConvNeXtProcessor(Processor):
     def __init__(self, image_size=224):
@@ -87,25 +87,25 @@ class ConvNeXtProcessor(Processor):
         return self.transform(image)
 ```
 
-**为什么这样设计**:
-- ✅ 可以在不加载模型的情况下预处理数据
-- ✅ 支持多进程 DataLoader（不需要序列化模型）
-- ✅ 易于测试和复用
-- ✅ 训练和验证可以使用不同的 processor（augmentation）
+**Design Rationale**:
+- ✅ Can preprocess data without loading the model
+- ✅ Supports multiprocessing in DataLoader (no need to serialize the model)
+- ✅ Easy to test and reuse
+- ✅ Can use different processors for training and validation (augmentation)
 
-### 2. Collator（批处理器）
+### 2. Collator
 
-**位置**: `classifier/data/collator.py`
+**Location**: `classifier/data/collator.py`
 
-**职责**:
-- 将多个样本组合成批次
-- 堆叠（stack）或填充（pad）张量
+**Responsibility**:
+- Combine multiple samples into a batch
+- Stack or pad tensors
 
-**不负责**:
-- 单样本预处理
-- 模型推理
+**Not responsible for**:
+- Single sample preprocessing
+- Model inference
 
-**接口设计**:
+**Interface Design**:
 ```python
 class Collator(ABC):
     @abstractmethod
@@ -123,7 +123,7 @@ class Collator(ABC):
         pass
 ```
 
-**实现示例**:
+**Implementation Example**:
 ```python
 class DefaultCollator(Collator):
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
@@ -132,26 +132,26 @@ class DefaultCollator(Collator):
         return {'pixel_values': pixel_values, 'labels': labels}
 ```
 
-**为什么这样设计**:
-- ✅ 与 PyTorch DataLoader 的 `collate_fn` 完美配合
-- ✅ 可以处理不同大小的图像（通过 padding）
-- ✅ 易于自定义批处理逻辑
-- ✅ 不影响 Dataset 和 Model 的实现
+**Design Rationale**:
+- ✅ Works perfectly with PyTorch DataLoader's `collate_fn`
+- ✅ Can handle images of different sizes (via padding)
+- ✅ Easy to customize batching logic
+- ✅ Does not affect the implementation of Dataset and Model
 
-### 3. Model（模型）
+### 3. Model
 
-**位置**: `classifier/models/model.py`
+**Location**: `classifier/models/model.py`
 
-**职责**:
-- 只负责前向传播（forward pass）
+**Responsibility**:
+- Only responsible for the forward pass
 
-**不负责**:
-- 数据预处理
-- 批处理
-- 损失计算
-- 优化
+**Not responsible for**:
+- Data preprocessing
+- Batching
+- Loss calculation
+- Optimization
 
-**接口设计**:
+**Interface Design**:
 ```python
 class Model(ABC, torch.nn.Module):
     @abstractmethod
@@ -165,37 +165,37 @@ class Model(ABC, torch.nn.Module):
         pass
 ```
 
-**实现示例**:
+**Implementation Example**:
 ```python
 class ConvNeXtModel(Model):
     def __init__(self, model_name: str, num_classes: int, pretrained: bool = True):
         super().__init__(model_name, num_classes)
         self.backbone = models.convnext_tiny(pretrained=pretrained)
-        # 替换分类头
+        # Replace the classifier head
         self.backbone.classifier[2] = nn.Linear(in_features, num_classes)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)
 ```
 
-**为什么这样设计**:
-- ✅ 符合 PyTorch nn.Module 标准
-- ✅ 可以直接与 DataLoader 配合使用
-- ✅ 易于导出（ONNX, TorchScript）
-- ✅ 职责单一，易于测试
+**Design Rationale**:
+- ✅ Conforms to the PyTorch nn.Module standard
+- ✅ Can be used directly with DataLoader
+- ✅ Easy to export (ONNX, TorchScript)
+- ✅ Single responsibility, easy to test
 
-### 4. Dataset（数据集）
+### 4. Dataset
 
-**位置**: `classifier/data/dataset.py`
+**Location**: `classifier/data/dataset.py`
 
-**职责**:
-- 管理数据索引和加载
-- 调用 Processor 处理样本
+**Responsibility**:
+- Manage data indexing and loading
+- Call the Processor to process samples
 
-**不负责**:
-- 批处理（由 DataLoader + Collator 完成）
+**Not responsible for**:
+- Batching (done by DataLoader + Collator)
 
-**接口设计**:
+**Interface Design**:
 ```python
 class ImageClassificationDataset(Dataset):
     def __init__(self, image_paths, labels, processor):
@@ -212,13 +212,13 @@ class ImageClassificationDataset(Dataset):
         }
 ```
 
-**为什么这样设计**:
-- ✅ 符合 PyTorch Dataset 标准
-- ✅ 可以使用不同的 Processor（训练/验证）
-- ✅ 支持多进程 DataLoader
-- ✅ 返回统一的 dict 格式
+**Design Rationale**:
+- ✅ Conforms to the PyTorch Dataset standard
+- ✅ Can use different Processors (for training/validation)
+- ✅ Supports multiprocessing in DataLoader
+- ✅ Returns a consistent dict format
 
-## 数据流
+## Data Flow
 
 ```
 1. Image Loading
@@ -253,108 +253,108 @@ class ImageClassificationDataset(Dataset):
    └─ Returns: logits (B, num_classes)
 ```
 
-## 完整使用流程
+## Complete Usage Flow
 
 ```python
-# 1. 创建 Processor
+# 1. Create Processor
 train_processor = ConvNeXtTrainProcessor(image_size=224, augment=True)
 val_processor = ConvNeXtProcessor(image_size=224)
 
-# 2. 创建 Dataset
+# 2. Create Dataset
 train_dataset = HuggingFaceDataset(
     dataset_name="pufanyi/flowers102",
     split="train",
-    processor=train_processor,  # 使用训练 processor（有 augmentation）
+    processor=train_processor,  # Use training processor (with augmentation)
 )
 val_dataset = HuggingFaceDataset(
     dataset_name="pufanyi/flowers102",
     split="validation",
-    processor=val_processor,  # 使用验证 processor（无 augmentation）
+    processor=val_processor,  # Use validation processor (no augmentation)
 )
 
-# 3. 创建 Collator
+# 3. Create Collator
 collator = DefaultCollator()
 
-# 4. 创建 DataLoader
+# 4. Create DataLoader
 train_loader = DataLoader(
     train_dataset,
     batch_size=32,
     shuffle=True,
-    collate_fn=collator,  # 使用 collator 进行批处理
+    collate_fn=collator,  # Use collator for batching
 )
 
-# 5. 创建 Model
+# 5. Create Model
 model = ConvNeXtModel(
     model_name="convnext_tiny",
     num_classes=102,
     pretrained=True,
 )
 
-# 6. 训练循环
+# 6. Training Loop
 for batch in train_loader:
-    images = batch['pixel_values']  # (B, C, H, W) - 已经批处理好了
+    images = batch['pixel_values']  # (B, C, H, W) - already batched
     labels = batch['labels']        # (B,)
 
-    outputs = model(images)         # forward 接收 tensor，不是 list
+    outputs = model(images)         # forward accepts a tensor, not a list
     loss = criterion(outputs, labels)
 
     loss.backward()
     optimizer.step()
 ```
 
-## 与旧设计的对比
+## Comparison with Old Design
 
-### 旧设计 ❌
+### Old Design ❌
 
 ```python
 class Model(ABC, torch.nn.Module):
     @abstractmethod
     def process_image(self, image: Image.Image) -> torch.Tensor:
-        pass  # 问题：Model 不应该负责数据预处理
+        pass  # Problem: Model should not be responsible for data preprocessing
 
     @abstractmethod
     def collate_images(self, images: list[torch.Tensor]) -> torch.Tensor:
-        pass  # 问题：Model 不应该负责批处理
+        pass  # Problem: Model should not be responsible for batching
 
     @abstractmethod
     def forward(self, images: list[torch.Tensor]) -> torch.Tensor:
-        pass  # 问题：forward 应该接收 tensor，不是 list
+        pass  # Problem: forward should accept a tensor, not a list
 ```
 
-**问题**:
-1. **职责混乱**: Model 同时负责预处理、批处理和推理
-2. **不符合 PyTorch 模式**: forward 接收 list 而不是 tensor
-3. **难以与 DataLoader 集成**: collate_images 和 DataLoader 的 collate_fn 重复
-4. **多进程问题**: DataLoader workers 需要序列化包含预处理逻辑的 model
-5. **难以扩展**: 添加新模型需要实现所有方法，即使预处理逻辑相同
+**Problems**:
+1. **Mixed Responsibilities**: Model is responsible for preprocessing, batching, and inference.
+2. **Doesn't Follow PyTorch Pattern**: `forward` accepts a list instead of a tensor.
+3. **Difficult to Integrate with DataLoader**: `collate_images` duplicates DataLoader's `collate_fn`.
+4. **Multiprocessing Issues**: DataLoader workers need to serialize the model, which includes preprocessing logic.
+5. **Difficult to Extend**: Adding a new model requires implementing all methods, even if the preprocessing logic is the same.
 
-### 新设计 ✅
+### New Design ✅
 
 ```python
 class Processor:
     def __call__(self, image: Image.Image) -> torch.Tensor:
-        pass  # ✅ 只负责单样本预处理
+        pass  # ✅ Only responsible for single sample preprocessing
 
 class Collator:
     def __call__(self, batch: list[dict]) -> dict[str, torch.Tensor]:
-        pass  # ✅ 只负责批处理
+        pass  # ✅ Only responsible for batching
 
 class Model(torch.nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass  # ✅ 只负责前向传播
+        pass  # ✅ Only responsible for the forward pass
 ```
 
-**优势**:
-1. ✅ **职责清晰**: 每个组件只负责一件事
-2. ✅ **符合 PyTorch 生态**: 遵循标准模式
-3. ✅ **易于扩展**: 独立添加新模型、processor、collator
-4. ✅ **支持多进程**: Processor 不依赖 model
-5. ✅ **易于测试**: 各组件可以独立测试
-6. ✅ **灵活性**: 可以任意组合不同的组件
+**Advantages**:
+1. ✅ **Clear Responsibilities**: Each component does one thing.
+2. ✅ **Follows PyTorch Ecosystem**: Adheres to standard patterns.
+3. ✅ **Easy to Extend**: Independently add new models, processors, collators.
+4. ✅ **Supports Multiprocessing**: Processor does not depend on the model.
+5. ✅ **Easy to Test**: Components can be tested independently.
+6. ✅ **Flexibility**: Can arbitrarily combine different components.
 
-## 配置管理（Hydra）
+## Configuration Management (Hydra)
 
-使用 Hydra 管理配置，支持模块化和命令行覆盖：
+Use Hydra to manage configurations, supporting modularity and command-line overrides:
 
 ```yaml
 # config.yaml
@@ -380,30 +380,30 @@ optimizer:
   lr: 1e-4
 ```
 
-命令行覆盖:
+Command-line override:
 ```bash
 python -m classifier.train model=convnext_small trainer.batch_size=64
 ```
 
-## 扩展指南
+## Extension Guide
 
-### 添加新模型
+### Adding a New Model
 
-1. 实现 Model:
+1. Implement the Model:
 ```python
 class YourModel(Model):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.backbone(x)
 ```
 
-2. 实现 Processor:
+2. Implement the Processor:
 ```python
 class YourProcessor(Processor):
     def __call__(self, image: Image.Image) -> torch.Tensor:
         return self.transform(image)
 ```
 
-3. 创建配置文件:
+3. Create a configuration file:
 ```yaml
 # model/your_model.yaml
 name: your_model
@@ -412,19 +412,19 @@ processor:
   image_size: 224
 ```
 
-4. 更新训练脚本中的 `create_model()` 和 `create_processors()`
+4. Update `create_model()` and `create_processors()` in the training script.
 
-## 总结
+## Summary
 
-这个设计遵循了以下原则：
+This design follows these principles:
 
-1. **单一职责原则**: 每个组件只负责一件事
-2. **开闭原则**: 对扩展开放，对修改封闭
-3. **依赖倒置**: 依赖抽象接口，不依赖具体实现
-4. **符合标准**: 遵循 PyTorch 生态的最佳实践
+1. **Single Responsibility Principle**: Each component does one thing.
+2. **Open/Closed Principle**: Open for extension, closed for modification.
+3. **Dependency Inversion**: Depend on abstract interfaces, not concrete implementations.
+4. **Conformance to Standards**: Follows best practices of the PyTorch ecosystem.
 
-这使得代码：
-- 易于理解和维护
-- 易于测试
-- 易于扩展
-- 符合行业标准
+This makes the code:
+- Easy to understand and maintain
+- Easy to test
+- Easy to extend
+- Compliant with industry standards
