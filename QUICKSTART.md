@@ -93,23 +93,27 @@ model.eval()
 ### 4. 进行评测
 
 ```bash
-# 单卡评测（使用默认的 validation split）
-python -m eval.pipeline.run
+# 单卡评测多个检查点（支持任意数量，使用 -- 分隔额外 Hydra 参数）
+./scripts/eval/single.sh \
+    outputs/resnet152_lr1e-5/step_300 \
+    outputs/resnet152_lr1e-5/step_400 \
+    -- evaluation.split=test evaluation.metrics_output_path=outputs/test_metrics.json
 
-# 指定检查点（如分布式训练得到的 step_500）
-python -m eval.pipeline.run \
-    evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500 \
-    evaluation.checkpoint_format=fsdp
+# 分布式评测（FSDP 检查点需与训练 world size 相同）
+NPROC_PER_NODE=4 ./scripts/eval/distributed.sh \
+    outputs/resnet152_lr1e-5/step_500 \
+    outputs/resnet152_lr1e-5/step_450 \
+    -- evaluation.topk=[1,3,5]
 
-# 多卡评测需保持与训练相同的 world size
-torchrun --nproc_per_node=4 -m eval.pipeline.run \
-    evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500
+# 仍可直接调用 Hydra 入口（无脚本场景）
+python -m eval.pipeline.run evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500
 ```
 
-- `evaluation.split`：选择 `train` / `validation` / `test` 或自定义 HF split。
-- `evaluation.max_samples`：限制样本数量，便于快速抽查。
-- `evaluation.metrics_output_path`：指定 JSON 文件路径，可自动落盘评测指标。
-- 如果使用 FSDP 切分的权重，评测时需用 `torchrun` 并保持 world size 一致。
+- `evaluation.split`：`train` / `validation` / `test` 或任意 HF split；默认 `validation`。
+- `evaluation.max_samples`：限制样本数量，可加速抽查。
+- `evaluation.metrics_output_path`：提供 JSON 路径即可自动写出指标。
+- `CHECKPOINT_FORMAT` 环境变量控制脚本加载方式（单卡默认 auto，多卡默认 fsdp）。
+- 使用 FSDP 分片权重时，`torchrun` 评测的 `NPROC_PER_NODE` 必须与训练一致。
 
 ## 📚 配置说明
 
