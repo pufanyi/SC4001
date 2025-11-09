@@ -176,7 +176,10 @@ class ClassifierTrainer:
     def save_model(self):
         rank = _get_rank()
         world_size = _get_world_size()
-        output_dir = Path(self.config.trainer.get("output_dir", "outputs")) / f"step_{self.global_step}"
+        output_dir = (
+            Path(self.config.trainer.get("output_dir", "outputs"))
+            / f"step_{self.global_step}"
+        )
         if rank == 0:
             output_dir.mkdir(parents=True, exist_ok=True)
         model_path = output_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
@@ -206,7 +209,9 @@ class ClassifierTrainer:
             dataloader_state = self.train_dataloader.state_dict()
             torch.save(dataloader_state, dataloader_state_path)
         else:
-            logger.warning("Train dataloader does not implement state_dict; skipping save")
+            logger.warning(
+                "Train dataloader does not implement state_dict; skipping save"
+            )
         logger.info(f"State saved to {output_dir}")
         self._log({"checkpoint/step": self.global_step})
         if (
@@ -322,8 +327,12 @@ class ClassifierTrainer:
         world_size = _get_world_size()
         logger.info(f"Resuming training from checkpoint {checkpoint_dir}")
         model_path = checkpoint_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
-        optimizer_path = checkpoint_dir / "optimizer" / f"ws_{world_size}_rank_{rank}.pt"
-        extra_state_path = checkpoint_dir / "extra_state" / f"ws_{world_size}_rank_{rank}.pt"
+        optimizer_path = (
+            checkpoint_dir / "optimizer" / f"ws_{world_size}_rank_{rank}.pt"
+        )
+        extra_state_path = (
+            checkpoint_dir / "extra_state" / f"ws_{world_size}_rank_{rank}.pt"
+        )
         dataloader_state_path = (
             checkpoint_dir / "dataloader_state" / f"ws_{world_size}_rank_{rank}.pt"
         )
@@ -351,7 +360,9 @@ class ClassifierTrainer:
         if dataloader_state_path.exists() and hasattr(
             self.train_dataloader, "load_state_dict"
         ):
-            dataloader_state = torch.load(dataloader_state_path, map_location=map_location)
+            dataloader_state = torch.load(
+                dataloader_state_path, map_location=map_location
+            )
             self.train_dataloader.load_state_dict(dataloader_state)
         elif dataloader_state_path.exists():
             logger.warning(
@@ -419,7 +430,8 @@ class ClassifierTrainer:
                     loss_item = loss.item()
                     loss.backward()
                     grad_norm = clip_grad_norm_(
-                        self.fsdp2_model.parameters(), self.config.trainer.grad_norm_clip
+                        self.fsdp2_model.parameters(),
+                        self.config.trainer.grad_norm_clip,
                     )
                     grad_norm_tensor = (
                         grad_norm
@@ -440,7 +452,9 @@ class ClassifierTrainer:
                         self.optimizer.zero_grad()
                     self.lr_scheduler.step()
                     current_lr = self.lr_scheduler.get_last_lr()[0]
-                    loss_item = torch.tensor(loss_item, device=torch.cuda.current_device())
+                    loss_item = torch.tensor(
+                        loss_item, device=torch.cuda.current_device()
+                    )
                     all_reduce(loss_item, op=ReduceOp.AVG)
                     self.global_step += 1
                     logger.info(
