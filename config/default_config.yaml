@@ -46,14 +46,14 @@ trainer:
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 20
-  eval_steps: 10
-  save_steps: 10
+  num_steps: 1000
+  eval_steps: 100
+  save_steps: 100
   save_total_limit: 10
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs
+  output_dir: outputs/convnextv2-huge-22k-384_lr1e-5
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi

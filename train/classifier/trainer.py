@@ -123,12 +123,12 @@ class ClassifierTrainer:
         self.optimizer = get_optimizer(self.config, self.model)
         self.lr_scheduler = get_lr_scheduler(self.config, self.optimizer)
 
-    def compute_loss(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+    def compute_loss(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
         cast_type = getattr(torch, self.config.trainer.precision.param_type)
         with torch.autocast(device_type="cuda", dtype=cast_type):
             outputs = self.fsdp2_model(**batch)
             loss = outputs["loss"]
-        return loss
+        return outputs, loss
 
     def prepare_model(self):
         param_dtype = getattr(torch, self.config.trainer.precision.param_type)
@@ -162,18 +162,25 @@ class ClassifierTrainer:
         return self.global_step >= self.config.trainer.num_steps
 
     def eval(self):
+        rank = _get_rank()
         self.fsdp2_model.eval()
         total_loss = 0
         total_batches = 0
+        num_samples = len(self.val_dataloader.dataset)
+        num_correct = 0
         for batch in self.val_dataloader:
             batch = send_to_device(batch, device=torch.cuda.current_device())
             with torch.no_grad():
-                loss = self.compute_loss(batch)
+                outputs, loss = self.compute_loss(batch)
                 total_loss += loss.item()
                 total_batches += 1
+                preds = outputs["logits"].argmax(dim=-1)
+                num_correct += (preds == batch["labels"]).sum().item()
         final_loss = total_loss / max(total_batches, 1)
-        logger.info(f"Step {self.global_step} evaluation loss: {final_loss}")
-        self._log({"eval/loss": final_loss})
+        accuracy = num_correct / num_samples
+        if rank == 0:
+            logger.info(f"Step {self.global_step} evaluation loss: {final_loss}, accuracy: {accuracy}")
+            self._log({"eval/loss": final_loss, "eval/accuracy": accuracy})
         return final_loss
 
     def save_model(self):
@@ -427,7 +434,7 @@ class ClassifierTrainer:
                     batch = send_to_device(batch, device=torch.cuda.current_device())
                     self.fsdp2_model.train()
                     self.optimizer.zero_grad()
-                    loss = self.compute_loss(batch)
+                    outputs, loss = self.compute_loss(batch)
                     if world_size > 1:
                         loss = loss.mean()
                     loss_item = loss.item()
@@ -467,12 +474,13 @@ class ClassifierTrainer:
                         "train/loss": loss_item.item(),
                         "train/grad_norm": grad_norm_value,
                         "train/lr": current_lr,
+                        "train/epoch": self.global_step / len(self.train_dataloader),
                     }
-                    if self.global_step % self.config.trainer.logging_steps == 0:
+                    if rank == 0 and self.global_step % self.config.trainer.logging_steps == 0:
                         self._log(metrics)
                     if self.global_step % self.config.trainer.eval_steps == 0:
                         self.eval()
-                    if self.global_step % self.config.trainer.save_steps == 0:
+                    if rank == 0 and self.global_step % self.config.trainer.save_steps == 0:
                         self.save_model()
                     pbar.update(1)
         finally:
