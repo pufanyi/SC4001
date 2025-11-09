@@ -1,11 +1,13 @@
 defaults:
   - dataset: flowers102
   - _self_
+
 model:
-  name: facebook/convnextv2-huge-22k-384
+  name: microsoft/resnet-152
   pretrained: true
+
 processor:
-  name: facebook/convnextv2-huge-22k-384
+  name: microsoft/resnet-152
   train:
     use_randaugment: true
     randaugment_n: 2
@@ -27,32 +29,33 @@ processor:
     erasing_prob: 0.25
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
+
 trainer:
-  train_batch_size: 32
-  eval_batch_size: 128
+  train_batch_size: 128
+  eval_batch_size: 512
   dataloader_num_workers: 16
-  learning_rate: 1.0e-5
+  learning_rate: 1.0e-4
   optimizer:
     name: adamw
     weight_decay: 1.0e-5
   lr_scheduler:
     name: wsd
     num_warmup_rate: 0.05
-    num_decay_steps: 18
+    num_decay_steps: 50
   precision:
-    param_type: bfloat16
+    param_type: float32
     reduction_type: float32
-    output_type: bfloat16
+    output_type: float32
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 1000
-  eval_steps: 100
-  save_steps: 100
+  num_steps: 500
+  eval_steps: 50
+  save_steps: 50
   save_total_limit: 10
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/convnextv2-huge-22k-384
+  output_dir: outputs/resnet152_lr1e-5
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi

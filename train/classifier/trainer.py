@@ -495,9 +495,10 @@ class ClassifierTrainer:
                     )
                     all_reduce(loss_item, op=ReduceOp.AVG)
                     self.global_step += 1
-                    logger.info(
-                        f"Step {self.global_step} training loss: {loss_item.item()}"
-                    )
+                    if rank == 0:
+                        logger.info(
+                            f"Step {self.global_step} training loss: {loss_item.item()}"
+                        )
                     metrics = {
                         "train/loss": loss_item.item(),
                         "train/grad_norm": grad_norm_value,
