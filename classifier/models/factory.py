@@ -13,4 +13,5 @@ class ModelFactory:
             id2label=ID2LABEL,
             label2id=LABEL2ID,
             num_labels=NUM_CLASSES,
+            ignore_mismatched_sizes=True,
         )

@@ -49,3 +49,10 @@ class DefaultCollator(Collator):
         labels = torch.tensor([item["labels"] for item in batch], dtype=torch.long)
 
         return {"pixel_values": pixel_values, "labels": labels}
+
+
+class DataCollator(DefaultCollator):
+    """
+    Backwards-compatible alias so training code can depend on DataCollator
+    while keeping DefaultCollator as the primary implementation.
+    """

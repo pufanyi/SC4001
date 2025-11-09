@@ -2,10 +2,10 @@ defaults:
   - dataset: flowers102
   - _self_
 model:
-  name: convnextv2_huge_22k_384
+  name: facebook/convnextv2-huge-22k-384
   pretrained: true
 processor:
-  name: convnextv2_huge_22k_384
+  name: facebook/convnextv2-huge-22k-384
   train:
     use_randaugment: true
     randaugment_n: 2
@@ -28,35 +28,35 @@ processor:
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
 trainer:
-  train_batch_size: 64
-  eval_batch_size: 64
-  dataloader_num_workers: 8
-  learning_rate: 1.0e-6
+  train_batch_size: 32
+  eval_batch_size: 128
+  dataloader_num_workers: 16
+  learning_rate: 1.0e-5
   optimizer:
     name: adamw
-    weight_decay: 1.0e-6
+    weight_decay: 1.0e-5
   lr_scheduler:
     name: wsd
-    num_warmup_steps: 10
-    num_decay_steps: 10
-    num_training_steps: 100
+    num_warmup_steps: 2
+    num_decay_steps: 18
+    num_training_steps: 20
   precision:
     param_type: bfloat16
     reduction_type: float32
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 10000
-  eval_steps: 1000
-  save_steps: 1000
+  num_steps: 20
+  eval_steps: 10
+  save_steps: 10
   save_total_limit: 10
-  logging_steps: 10
+  logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
   output_dir: outputs
   resume_from_checkpoint: null
-  wandb_project: sc4001-classifier
-  wandb_entity: null
+  wandb_project: sc4001
+  wandb_entity: pufanyi
   wandb_run_name: null
   wandb_run_id: null
   wandb_tags: []

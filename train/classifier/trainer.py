@@ -14,8 +14,9 @@ from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
     set_model_state_dict,
 )
-from torch.distributed.fsdp import DeviceMesh, MixedPrecisionPolicy, fully_shard
-from torch.distributed.reduce_op import ReduceOp
+from torch.distributed.device_mesh import DeviceMesh
+from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
+from torch.distributed import ReduceOp
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -70,8 +71,8 @@ def apply_fsdp2(
             modules.append(module)
 
     for module in modules:
-        fully_shard(module, fsdp_kwargs)
-    fully_shard(model, fsdp_kwargs)
+        fully_shard(module, **fsdp_kwargs)
+    fully_shard(model, **fsdp_kwargs)
 
 
 # Adapted from https://github.com/EvolvingLMMs-Lab/lmms-engine/blob/main/src/lmms_engine/utils/fsdp2_utils.py
@@ -130,11 +131,13 @@ class ClassifierTrainer:
         return loss
 
     def prepare_model(self):
-        param_type = getattr(torch, self.config.trainer.precision.param_type)
-        reduct_type = getattr(torch, self.config.trainer.precision.reduction_type)
-        output_type = getattr(torch, self.config.trainer.precision.output_type)
+        param_dtype = getattr(torch, self.config.trainer.precision.param_type)
+        reduce_dtype = getattr(torch, self.config.trainer.precision.reduction_type)
+        output_dtype = getattr(torch, self.config.trainer.precision.output_type)
         mp_policy = MixedPrecisionPolicy(
-            param_type=param_type, reduction_type=reduct_type, output_type=output_type
+            param_dtype=param_dtype,
+            reduce_dtype=reduce_dtype,
+            output_dtype=output_dtype,
         )
         reshard_after_forward = self.config.trainer.reshard_after_forward
         fsdp_config = {
