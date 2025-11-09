@@ -52,6 +52,11 @@ python -m classifier.train \
 # 使用更大的模型
 python -m classifier.train model=convnext_small
 
+# 使用 ViT Base 预设（脚本会自动激活 .venv）
+./scripts/train/vit.sh \
+    trainer.train_batch_size=32 \
+    trainer.learning_rate=3e-5
+
 # 调整超参数
 python -m classifier.train \
     trainer.batch_size=64 \
