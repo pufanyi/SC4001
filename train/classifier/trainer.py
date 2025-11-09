@@ -38,6 +38,15 @@ def _get_world_size() -> int:
     return dist.get_world_size()
 
 
+def _distributed_barrier():
+    if not dist.is_available() or not dist.is_initialized():
+        return
+    if torch.cuda.is_available():
+        dist.barrier(device_ids=[torch.cuda.current_device()])
+    else:
+        dist.barrier()
+
+
 # Adapted from https://github.com/EvolvingLMMs-Lab/lmms-engine/blob/main/src/lmms_engine/utils/fsdp2_utils.py
 def apply_fsdp2(
     model: PreTrainedModel,
@@ -225,8 +234,7 @@ class ClassifierTrainer:
             optimizer_path.parent.mkdir(parents=True, exist_ok=True)
             extra_state_path.parent.mkdir(parents=True, exist_ok=True)
             dataloader_state_path.parent.mkdir(parents=True, exist_ok=True)
-        if dist.is_available() and dist.is_initialized():
-            dist.barrier()
+        _distributed_barrier()
         torch.save(self.fsdp2_model.state_dict(), model_path)
         torch.save(self.optimizer.state_dict(), optimizer_path)
         extra_state = {
@@ -242,14 +250,14 @@ class ClassifierTrainer:
             logger.warning(
                 "Train dataloader does not implement state_dict; skipping save"
             )
-        logger.info(f"State saved to {output_dir}")
-        self._log({"checkpoint/step": self.global_step})
-        if (
-            rank == 0
-            and self.config.trainer.save_total_limit is not None
-            and self.config.trainer.save_total_limit > 0
-        ):
-            self._prune_checkpoints(output_dir.parent)
+        if rank == 0:
+            logger.info(f"State saved to {output_dir}")
+            self._log({"checkpoint/step": self.global_step})
+            if (
+                self.config.trainer.save_total_limit is not None
+                and self.config.trainer.save_total_limit > 0
+            ):
+                self._prune_checkpoints(output_dir.parent)
 
     def get_rng_state(self):
         rng_state = {
@@ -499,13 +507,11 @@ class ClassifierTrainer:
                     if rank == 0 and self.global_step % self.config.trainer.logging_steps == 0:
                         self._log(metrics)
                     if self.global_step % self.config.trainer.eval_steps == 0:
-                        if dist.is_available() and dist.is_initialized():
-                            dist.barrier()
+                        _distributed_barrier()
                         self.eval()
-                        if dist.is_available() and dist.is_initialized():
-                            dist.barrier()
+                        _distributed_barrier()
                         self.fsdp2_model.train()  # Set back to train mode
-                    if rank == 0 and self.global_step % self.config.trainer.save_steps == 0:
+                    if self.global_step % self.config.trainer.save_steps == 0:
                         self.save_model()
                     pbar.update(1)
         finally:
