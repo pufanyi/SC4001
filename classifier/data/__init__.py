@@ -1,13 +1,7 @@
 """Data processing components."""
 
 from .collator import Collator, DefaultCollator
-from .dataset import HuggingFaceDataset, ImageClassificationDataset
-from .processor import Processor
+from .dataset import HFDataset
+from .processor import ProcessorFactory
 
-__all__ = [
-    "Collator",
-    "DefaultCollator",
-    "HuggingFaceDataset",
-    "ImageClassificationDataset",
-    "Processor",
-]
+__all__ = ["Collator", "DefaultCollator", "HFDataset", "ProcessorFactory"]
