@@ -1,5 +1,6 @@
 defaults:
   - dataset: flowers102
+  - evaluation: default
   - _self_
 model:
   name: facebook/convnextv2-huge-22k-384

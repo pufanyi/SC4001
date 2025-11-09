@@ -1,0 +1,10 @@
+split: validation  # One of [train, val, validation, test] or custom HF split name
+max_samples: null  # Limit number of samples for quick smoke tests
+batch_size: null   # Override trainer.eval_batch_size if provided
+topk: [1, 5]       # Metrics to report
+checkpoint_path: null  # Path to checkpoint directory or file to load
+checkpoint_format: auto  # auto | fsdp | state_dict
+strict_load: true
+metrics_output_path: null  # Optional JSON file to dump results
+disable_tqdm: false
+use_amp: true

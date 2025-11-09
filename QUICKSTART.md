@@ -90,6 +90,27 @@ model.load_state_dict(checkpoint['model_state_dict'])
 model.eval()
 ```
 
+### 4. 进行评测
+
+```bash
+# 单卡评测（使用默认的 validation split）
+python -m eval.pipeline.run
+
+# 指定检查点（如分布式训练得到的 step_500）
+python -m eval.pipeline.run \
+    evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500 \
+    evaluation.checkpoint_format=fsdp
+
+# 多卡评测需保持与训练相同的 world size
+torchrun --nproc_per_node=4 -m eval.pipeline.run \
+    evaluation.checkpoint_path=outputs/resnet152_lr1e-5/step_500
+```
+
+- `evaluation.split`：选择 `train` / `validation` / `test` 或自定义 HF split。
+- `evaluation.max_samples`：限制样本数量，便于快速抽查。
+- `evaluation.metrics_output_path`：指定 JSON 文件路径，可自动落盘评测指标。
+- 如果使用 FSDP 切分的权重，评测时需用 `torchrun` 并保持 world size 一致。
+
 ## 📚 配置说明
 
 ### 数据集配置 (`dataset=...`)

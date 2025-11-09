@@ -1,5 +1,6 @@
 defaults:
   - dataset: flowers102
+  - evaluation: default
   - _self_
 
 model:
