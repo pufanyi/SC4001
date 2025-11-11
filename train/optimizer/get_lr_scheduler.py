@@ -5,7 +5,9 @@ from transformers.optimization import get_cosine_schedule_with_warmup, get_wsd_s
 
 
 def get_lr_scheduler(config: DictConfig, optimizer: torch.optim.Optimizer) -> LambdaLR:
-    num_warmup_steps = int(config.trainer.num_steps * config.trainer.lr_scheduler.num_warmup_rate)
+    num_warmup_steps = int(
+        config.trainer.num_steps * config.trainer.lr_scheduler.num_warmup_rate
+    )
     if config.trainer.lr_scheduler.name == "cosine":
         return get_cosine_schedule_with_warmup(
             optimizer=optimizer,

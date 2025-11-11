@@ -12,9 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Sequence
 
 import torch
 import torch.nn.functional as F
@@ -32,7 +32,9 @@ from classifier.utils.logger import logger
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Evaluate a Hugging Face model on a dataset split.")
+    parser = argparse.ArgumentParser(
+        description="Evaluate a Hugging Face model on a dataset split."
+    )
     parser.add_argument(
         "--model",
         required=True,
@@ -208,7 +210,11 @@ def _evaluate(
             with context:
                 outputs = model(pixel_values=pixel_values, labels=labels)
                 logits = outputs.logits
-                loss = outputs.loss if outputs.loss is not None else F.cross_entropy(logits, labels)
+                loss = (
+                    outputs.loss
+                    if outputs.loss is not None
+                    else F.cross_entropy(logits, labels)
+                )
             batch_size = labels.size(0)
             total_samples += batch_size
             total_loss += loss.item() * batch_size
@@ -228,7 +234,9 @@ def _evaluate(
         "accuracy": total_correct / max(total_samples, 1) * 100,
     }
     for idx, k in enumerate(topk_values):
-        metrics[f"accuracy@{k}"] = topk_correct[idx].item() / max(total_samples, 1) * 100
+        metrics[f"accuracy@{k}"] = (
+            topk_correct[idx].item() / max(total_samples, 1) * 100
+        )
     return metrics
 
 

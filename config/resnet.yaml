@@ -2,11 +2,9 @@ defaults:
   - dataset: flowers102
   - evaluation: default
   - _self_
-
 model:
   name: microsoft/resnet-152
   pretrained: true
-
 processor:
   name: microsoft/resnet-152
   train:
@@ -30,7 +28,6 @@ processor:
     erasing_prob: 0.25
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
-
 trainer:
   train_batch_size: 128
   eval_batch_size: 512

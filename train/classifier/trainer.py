@@ -9,14 +9,13 @@ import torch.distributed as dist
 from accelerate.utils import send_to_device
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
-from torch.distributed import all_reduce
+from torch.distributed import ReduceOp, all_reduce
 from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
     set_model_state_dict,
 )
 from torch.distributed.device_mesh import DeviceMesh
 from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
-from torch.distributed import ReduceOp
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -132,7 +131,9 @@ class ClassifierTrainer:
         self.optimizer = get_optimizer(self.config, self.model)
         self.lr_scheduler = get_lr_scheduler(self.config, self.optimizer)
 
-    def compute_loss(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+    def compute_loss(
+        self, batch: dict[str, torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         cast_type = getattr(torch, self.config.trainer.precision.param_type)
         with torch.autocast(device_type="cuda", dtype=cast_type):
             outputs = self.fsdp2_model(**batch)
@@ -178,38 +179,40 @@ class ClassifierTrainer:
         total_batches = 0
         num_correct = 0
         num_samples = 0
-        
+
         for batch in self.val_dataloader:
             batch = send_to_device(batch, device=torch.cuda.current_device())
             batch_size = batch["labels"].size(0)
             num_samples += batch_size
-            
+
             with torch.no_grad():
                 outputs, loss = self.compute_loss(batch)
                 total_loss += loss.item() * batch_size  # weight by batch size
                 total_batches += 1
                 preds = outputs["logits"].argmax(dim=-1)
                 num_correct += (preds == batch["labels"]).sum().item()
-        
+
         # Synchronize metrics across all ranks in distributed training
         if world_size > 1:
             # Convert to tensors for all_reduce
             metrics_tensor = torch.tensor(
-                [total_loss, num_correct, num_samples], 
+                [total_loss, num_correct, num_samples],
                 dtype=torch.float32,
-                device=torch.cuda.current_device()
+                device=torch.cuda.current_device(),
             )
             all_reduce(metrics_tensor, op=ReduceOp.SUM)
             total_loss, num_correct, num_samples = metrics_tensor.tolist()
-        
+
         # Calculate global metrics
         final_loss = total_loss / max(num_samples, 1)
         accuracy = num_correct / max(num_samples, 1)
-        
+
         if rank == 0:
-            logger.info(f"Step {self.global_step} evaluation loss: {final_loss:.4f}, accuracy: {accuracy:.4f}")
+            logger.info(
+                f"Step {self.global_step} evaluation loss: {final_loss:.4f}, accuracy: {accuracy:.4f}"
+            )
             self._log({"eval/loss": final_loss, "eval/accuracy": accuracy})
-        
+
         return final_loss
 
     def save_model(self):
@@ -505,7 +508,10 @@ class ClassifierTrainer:
                         "train/lr": current_lr,
                         "train/epoch": self.global_step / len(self.train_dataloader),
                     }
-                    if rank == 0 and self.global_step % self.config.trainer.logging_steps == 0:
+                    if (
+                        rank == 0
+                        and self.global_step % self.config.trainer.logging_steps == 0
+                    ):
                         self._log(metrics)
                     if self.global_step % self.config.trainer.eval_steps == 0:
                         _distributed_barrier()

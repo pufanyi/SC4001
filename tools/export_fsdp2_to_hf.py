@@ -11,15 +11,14 @@ import logging
 import os
 import sys
 from collections import OrderedDict
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 import torch
 import torch.distributed._tensor  # noqa: F401 - registers DTensor pickling
+from huggingface_hub import HfApi, HfFolder
 from torch.distributed._tensor import DTensor
 from torch.distributed._tensor import _utils as dt_utils
-
-from huggingface_hub import HfApi, HfFolder
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -151,8 +150,7 @@ def find_model_shards(checkpoint_dir: Path) -> list[Path]:
     world_size, _ = _extract_rank_info(shards[0])
     if len(shards) != world_size:
         logger.warning(
-            "Expected %d shards based on filenames but found %d. "
-            "Proceeding anyway.",
+            "Expected %d shards based on filenames but found %d. Proceeding anyway.",
             world_size,
             len(shards),
         )
@@ -169,7 +167,9 @@ def load_shard(path: Path, weights_only: bool) -> OrderedDict[str, object]:
     return state
 
 
-def _materialize_dtensor(dtensor: DTensor) -> tuple[tuple[slice, ...], torch.Tensor] | None:
+def _materialize_dtensor(
+    dtensor: DTensor,
+) -> tuple[tuple[slice, ...], torch.Tensor] | None:
     """Return the global slice indices and CPU tensor for a DTensor shard."""
     local_tensor = dtensor.to_local()
     if local_tensor.numel() == 0:
@@ -179,12 +179,15 @@ def _materialize_dtensor(dtensor: DTensor) -> tuple[tuple[slice, ...], torch.Ten
         dtensor.shape, dtensor.device_mesh, dtensor.placements
     )
     slices = tuple(
-        slice(offset, offset + size) for offset, size in zip(global_offset, local_tensor.shape)
+        slice(offset, offset + size)
+        for offset, size in zip(global_offset, local_tensor.shape, strict=False)
     )
     return slices, local_tensor
 
 
-def assemble_full_state(shard_states: Sequence[OrderedDict[str, object]]) -> OrderedDict[str, torch.Tensor]:
+def assemble_full_state(
+    shard_states: Sequence[OrderedDict[str, object]],
+) -> OrderedDict[str, torch.Tensor]:
     logger.info("Reconstructing full state dict from %d shards", len(shard_states))
     full_state: OrderedDict[str, torch.Tensor] = OrderedDict()
     keys = shard_states[0].keys()
@@ -204,7 +207,9 @@ def assemble_full_state(shard_states: Sequence[OrderedDict[str, object]]) -> Ord
         elif torch.is_tensor(sample_value):
             full_state[key] = sample_value.to("cpu")
         else:
-            raise TypeError(f"Unsupported state type for key '{key}': {type(sample_value)}")
+            raise TypeError(
+                f"Unsupported state type for key '{key}': {type(sample_value)}"
+            )
     logger.info("Full state dict contains %d tensors", len(full_state))
     return full_state
 
