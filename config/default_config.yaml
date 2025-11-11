@@ -8,6 +8,7 @@ model:
 processor:
   name: facebook/convnextv2-huge-22k-384
   train:
+    use_different_processors: true
     use_randaugment: true
     randaugment_n: 2
     randaugment_m: 9

@@ -8,6 +8,7 @@ model:
 processor:
   name: microsoft/resnet-152
   train:
+    use_different_processors: true
     use_randaugment: true
     randaugment_n: 2
     randaugment_m: 9
@@ -31,7 +32,7 @@ processor:
 trainer:
   train_batch_size: 128
   eval_batch_size: 512
-  dataloader_num_workers: 16
+  dataloader_num_workers: 64
   learning_rate: 1.0e-4
   optimizer:
     name: adamw
@@ -39,24 +40,24 @@ trainer:
   lr_scheduler:
     name: wsd
     num_warmup_rate: 0.05
-    num_decay_steps: 50
+    num_decay_steps: 100
   precision:
     param_type: float32
     reduction_type: float32
     output_type: float32
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 500
-  eval_steps: 50
-  save_steps: 50
-  save_total_limit: 10
+  num_steps: 1000
+  eval_steps: 20
+  save_steps: 1000
+  save_total_limit: 1
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/resnet152_lr1e-5
+  output_dir: outputs/resnet152-wsd-adamw
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: null
+  wandb_run_name: resnet152-wsd-adamw
   wandb_run_id: null
   wandb_tags: []

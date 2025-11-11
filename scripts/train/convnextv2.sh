@@ -7,5 +7,5 @@ NPROC_PER_NODE="${NPROC_PER_NODE:-4}"
 torchrun \
   --nproc_per_node="${NPROC_PER_NODE}" \
   -m train.pipeline.run \
-  --config-name default_config \
+  --config-name convnextv2 \
   "$@"

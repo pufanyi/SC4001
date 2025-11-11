@@ -3,11 +3,12 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: facebook/convnextv2-huge-22k-384
+  name: facebook/convnextv2-base-22k-384
   pretrained: true
 processor:
-  name: facebook/convnextv2-huge-22k-384
+  name: facebook/convnextv2-base-22k-384
   train:
+    use_different_processors: false
     use_randaugment: true
     randaugment_n: 2
     randaugment_m: 9
@@ -46,7 +47,7 @@ trainer:
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 200
+  num_steps: 400
   eval_steps: 10
   save_steps: 200
   save_total_limit: 10
@@ -57,6 +58,6 @@ trainer:
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: convnextv2-huge-22k-384-lr1e-5-cosine
+  wandb_run_name: convnextv2-huge-22k-384-cosine-adamw
   wandb_run_id: null
   wandb_tags: []
