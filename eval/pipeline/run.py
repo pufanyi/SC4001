@@ -1,369 +1,289 @@
+#!/usr/bin/env python3
+"""
+Minimal evaluation script for Hugging Face image classification models.
+
+Given a model (local path or Hub repo) and a dataset hosted on the Hugging Face Hub,
+this script computes top-k accuracy metrics without relying on Hydra configs or
+FSDP-specific logic.
+"""
+
+from __future__ import annotations
+
+import argparse
 import json
-import os
+import sys
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Iterable
+from typing import Sequence
 
-import hydra
 import torch
-import torch.distributed as dist
 import torch.nn.functional as F
-from accelerate.utils import send_to_device
-from omegaconf import DictConfig, OmegaConf
-from torch.distributed import ReduceOp
-from torch.distributed.fsdp import MixedPrecisionPolicy
-from torch.utils.data import DataLoader, DistributedSampler, Subset
+from torch.utils.data import DataLoader, Subset
 from tqdm import tqdm
+from transformers import AutoImageProcessor, AutoModelForImageClassification
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from classifier.data.collator.collator import DataCollator
 from classifier.data.dataset.dataset import HFDataset
-from classifier.data.processor.factory import ProcessorFactory
-from classifier.models.factory import ModelFactory
 from classifier.utils.logger import logger
-from train.classifier.trainer import apply_fsdp2, fsdp2_load_full_state_dict
 
 
-def _setup_distributed() -> tuple[int, int]:
-    """Initialise torch.distributed if launched via torchrun."""
-    if not dist.is_available():
-        return 0, 1
-    if dist.is_initialized():
-        return dist.get_rank(), dist.get_world_size()
-    if "RANK" not in os.environ:
-        return 0, 1
-    backend = "nccl" if torch.cuda.is_available() else "gloo"
-    dist.init_process_group(backend=backend)
-    if torch.cuda.is_available():
-        torch.cuda.set_device(int(os.environ.get("LOCAL_RANK", 0)))
-    return dist.get_rank(), dist.get_world_size()
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Evaluate a Hugging Face model on a dataset split.")
+    parser.add_argument(
+        "--model",
+        required=True,
+        help="Local path or repo id of the model to evaluate.",
+    )
+    parser.add_argument(
+        "--processor",
+        default=None,
+        help="Optional processor name/id. Defaults to the same as --model.",
+    )
+    parser.add_argument(
+        "--dataset",
+        default="pufanyi/flowers102",
+        help="Dataset repo id on the Hugging Face Hub.",
+    )
+    parser.add_argument(
+        "--split",
+        default="validation",
+        help="Dataset split to evaluate on (e.g. validation, test).",
+    )
+    parser.add_argument(
+        "--image-column",
+        default="image",
+        help="Column name that stores images inside the dataset.",
+    )
+    parser.add_argument(
+        "--label-column",
+        default="label",
+        help="Column name that stores labels inside the dataset.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=128,
+        help="Evaluation batch size.",
+    )
+    parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=8,
+        help="Number of dataloader workers.",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Optional cap on the number of samples to evaluate (useful for smoke tests).",
+    )
+    parser.add_argument(
+        "--topk",
+        type=int,
+        nargs="+",
+        default=[1, 5],
+        help="List of top-k accuracies to compute.",
+    )
+    parser.add_argument(
+        "--device",
+        default=None,
+        help="Device to run on (e.g. cuda, cuda:1, cpu). Defaults to cuda if available else cpu.",
+    )
+    parser.add_argument(
+        "--amp",
+        dest="use_amp",
+        action="store_true",
+        help="Enable automatic mixed precision (only valid on CUDA).",
+    )
+    parser.add_argument(
+        "--no-amp",
+        dest="use_amp",
+        action="store_false",
+        help="Disable automatic mixed precision.",
+    )
+    parser.set_defaults(use_amp=True)
+    parser.add_argument(
+        "--amp-dtype",
+        default="bfloat16",
+        choices=["float16", "bfloat16"],
+        help="Data type to use inside autocast when AMP is enabled.",
+    )
+    parser.add_argument(
+        "--metrics-output",
+        type=Path,
+        default=None,
+        help="Optional JSON file to dump metrics.",
+    )
+    parser.add_argument(
+        "--disable-tqdm",
+        action="store_true",
+        help="Disable progress bar.",
+    )
+    parser.add_argument(
+        "--trust-remote-code",
+        action="store_true",
+        help="Pass trust_remote_code=True to AutoModel/AutoProcessor (required for some repos).",
+    )
+    return parser.parse_args()
 
 
-def _cleanup_distributed() -> None:
-    if dist.is_available() and dist.is_initialized():
-        dist.destroy_process_group()
+def _resolve_device(device_arg: str | None) -> torch.device:
+    if device_arg is not None:
+        return torch.device(device_arg)
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def _canonical_split_key(split: str) -> str | None:
-    key = split.lower()
-    if key == "train":
-        return "train"
-    if key in {"val", "validation"}:
-        return "val"
-    if key == "test":
-        return "test"
-    return None
-
-
-def _resolve_split_name(dataset_cfg: DictConfig, target_split: str) -> str:
-    split_key = target_split.lower()
-    mapping = {
-        "train": dataset_cfg.get("train_split"),
-        "val": dataset_cfg.get("val_split"),
-        "validation": dataset_cfg.get("val_split"),
-        "test": dataset_cfg.get("test_split"),
-    }
-    resolved = mapping.get(split_key, target_split)
-    if resolved is None:
-        raise ValueError(f"Split '{target_split}' is not defined in the dataset config.")
-    return resolved
-
-
-def _resolve_max_samples(
-    dataset_cfg: DictConfig, canonical_split: str | None, override: int | None
-) -> int | None:
-    if override is not None:
-        return int(override)
-    split_to_key = {
-        "train": "max_train_samples",
-        "val": "max_val_samples",
-        "test": "max_test_samples",
-    }
-    if canonical_split is None:
-        return None
-    cfg_key = split_to_key.get(canonical_split)
-    if cfg_key is None:
-        return None
-    max_value = dataset_cfg.get(cfg_key)
-    if max_value is None:
-        return None
-    return int(max_value)
-
-
-def _limit_dataset(dataset: HFDataset, max_samples: int | None) -> HFDataset | Subset[HFDataset]:
-    if max_samples is None:
-        return dataset
-    limit = min(max_samples, len(dataset))
-    indices = list(range(limit))
-    return Subset(dataset, indices)
+def _normalize_topk(topk_values: Sequence[int]) -> list[int]:
+    unique = sorted({int(k) for k in topk_values if int(k) > 0})
+    return unique or [1]
 
 
 def _build_dataloader(
-    cfg: DictConfig, processor, rank: int, world_size: int
-) -> tuple[DataLoader, str]:
-    eval_cfg = cfg.evaluation
-    dataset_cfg = cfg.dataset
-    resolved_split = _resolve_split_name(dataset_cfg, eval_cfg.split)
-    canonical_key = _canonical_split_key(eval_cfg.split)
-    max_samples = _resolve_max_samples(dataset_cfg, canonical_key, eval_cfg.max_samples)
+    dataset_name: str,
+    split: str,
+    processor,
+    image_column: str,
+    label_column: str,
+    batch_size: int,
+    num_workers: int,
+    max_samples: int | None,
+) -> DataLoader:
     dataset = HFDataset(
-        dataset_name=dataset_cfg.dataset_id,
-        split=resolved_split,
+        dataset_name=dataset_name,
+        split=split,
         processor=processor,
         transform=None,
-        image_column=dataset_cfg.image_column,
-        label_column=dataset_cfg.label_column,
+        image_column=image_column,
+        label_column=label_column,
     )
-    dataset = _limit_dataset(dataset, max_samples)
-    sampler = (
-        DistributedSampler(
-            dataset,
-            num_replicas=world_size,
-            rank=rank,
-            shuffle=False,
-            drop_last=False,
-        )
-        if world_size > 1
-        else None
-    )
-    batch_size = eval_cfg.batch_size or cfg.trainer.eval_batch_size
-    dataloader = DataLoader(
+    if max_samples is not None:
+        limit = min(max_samples, len(dataset))
+        dataset = Subset(dataset, list(range(limit)))
+    return DataLoader(
         dataset,
         batch_size=batch_size,
-        sampler=sampler,
         shuffle=False,
         collate_fn=DataCollator(),
-        num_workers=cfg.trainer.dataloader_num_workers,
+        num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
         drop_last=False,
     )
-    if rank == 0:
-        logger.info(
-            f"Evaluating split '{resolved_split}' with {len(dataset)} samples "
-            f"and batch size {batch_size}."
-        )
-    return dataloader, resolved_split
-
-
-def _prepare_model_for_eval(model: torch.nn.Module, cfg: DictConfig, use_fsdp: bool) -> torch.nn.Module:
-    if not use_fsdp:
-        return model
-    param_dtype = getattr(torch, cfg.trainer.precision.param_type)
-    reduce_dtype = getattr(torch, cfg.trainer.precision.reduction_type)
-    output_dtype = getattr(torch, cfg.trainer.precision.output_type)
-    mp_policy = MixedPrecisionPolicy(
-        param_dtype=param_dtype, reduce_dtype=reduce_dtype, output_dtype=output_dtype
-    )
-    fsdp_config = {
-        "mp_policy": mp_policy,
-        "reshard_after_forward": cfg.trainer.reshard_after_forward,
-    }
-    full_state = model.state_dict()
-    transformer_cls_to_wrap = cfg.trainer.transformer_cls_names_to_wrap
-    apply_fsdp2(model, fsdp_config, transformer_cls_to_wrap)
-    fsdp2_load_full_state_dict(model, full_state)
-    del full_state
-    torch.cuda.empty_cache()
-    return model
-
-
-def _parse_world_size_from_shard(shard_path: Path) -> int:
-    # Expected pattern: ws_{world_size}_rank_{rank}.pt
-    parts = shard_path.stem.split("_")
-    try:
-        ws_index = parts.index("ws")
-        world_size = int(parts[ws_index + 1])
-    except (ValueError, IndexError):
-        raise ValueError(f"Cannot parse world size from shard name {shard_path.name}") from None
-    return world_size
-
-
-def _load_checkpoint_if_needed(
-    model: torch.nn.Module,
-    eval_cfg: DictConfig,
-    world_size: int,
-    rank: int,
-) -> None:
-    checkpoint_path = eval_cfg.checkpoint_path
-    if checkpoint_path is None:
-        logger.info("No checkpoint path provided; evaluating pretrained weights.")
-        return
-    checkpoint_path = Path(checkpoint_path)
-    checkpoint_format = eval_cfg.checkpoint_format
-    if checkpoint_format not in {"auto", "fsdp", "state_dict"}:
-        raise ValueError(f"Unknown checkpoint_format '{checkpoint_format}'")
-
-    if checkpoint_path.is_file() and checkpoint_format in {"auto", "state_dict"}:
-        state_dict = torch.load(checkpoint_path, map_location="cpu")
-        missing, unexpected = model.load_state_dict(state_dict, strict=eval_cfg.strict_load)
-        if missing and rank == 0:
-            logger.warning(f"Missing keys when loading checkpoint: {missing}")
-        if unexpected and rank == 0:
-            logger.warning(f"Unexpected keys when loading checkpoint: {unexpected}")
-        logger.info(f"Loaded checkpoint from file {checkpoint_path}")
-        return
-
-    if checkpoint_path.is_dir():
-        model_dir = checkpoint_path / "model"
-        if model_dir.exists() and checkpoint_format in {"auto", "fsdp"}:
-            sample_shards = sorted(model_dir.glob("ws_*_rank_*.pt"))
-            if not sample_shards:
-                raise FileNotFoundError(
-                    f"No FSDP shards found under {model_dir}. "
-                    "Ensure the checkpoint directory is correct."
-                )
-            expected_world_size = _parse_world_size_from_shard(sample_shards[0])
-            if expected_world_size != world_size:
-                raise ValueError(
-                    f"Checkpoint expects world_size={expected_world_size} "
-                    f"but evaluation is running with world_size={world_size}."
-                )
-            shard_path = model_dir / f"ws_{world_size}_rank_{rank}.pt"
-            if not shard_path.exists():
-                raise FileNotFoundError(
-                    f"Shard {shard_path} not found for rank {rank}. "
-                    "Make sure evaluation uses the same number of processes as training."
-                )
-            state_dict = torch.load(shard_path, map_location="cpu")
-            missing, unexpected = model.load_state_dict(
-                state_dict, strict=eval_cfg.strict_load
-            )
-            if missing and rank == 0:
-                logger.warning(f"Missing keys when loading shard: {missing}")
-            if unexpected and rank == 0:
-                logger.warning(f"Unexpected keys when loading shard: {unexpected}")
-            logger.info(f"Loaded sharded checkpoint from {shard_path}")
-            return
-
-    raise FileNotFoundError(
-        f"Could not interpret checkpoint path '{checkpoint_path}'. "
-        "Set evaluation.checkpoint_format to 'fsdp' or 'state_dict' if detection fails."
-    )
-
-
-def _reduce_tensor(value: torch.Tensor, op: ReduceOp = ReduceOp.SUM) -> torch.Tensor:
-    if dist.is_available() and dist.is_initialized():
-        dist.all_reduce(value, op=op)
-    return value
 
 
 def _evaluate(
-    model: torch.nn.Module,
+    model,
     dataloader: DataLoader,
     device: torch.device,
-    cfg: DictConfig,
-    rank: int,
-    world_size: int,
+    topk_values: Sequence[int],
+    use_amp: bool,
+    amp_dtype: torch.dtype,
+    disable_tqdm: bool,
 ) -> dict[str, float]:
-    eval_cfg = cfg.evaluation
-    topk_values = sorted({int(k) for k in eval_cfg.topk if int(k) > 0})
-    if not topk_values:
-        topk_values = [1]
-    max_requested_k = max(topk_values)
-    disable_amp = not (eval_cfg.use_amp and torch.cuda.is_available())
-
-    iterator: Iterable = dataloader
-    if rank == 0 and not eval_cfg.disable_tqdm:
+    model.to(device)
+    model.eval()
+    iterator = dataloader
+    if not disable_tqdm:
         iterator = tqdm(iterator, desc="Evaluating", total=len(dataloader))
 
     total_loss = 0.0
-    total_correct = 0.0
-    total_samples = 0.0
-    topk_correct = torch.zeros(len(topk_values), dtype=torch.float64, device=device)
-    warned_topk = False
+    total_samples = 0
+    total_correct = 0
+    topk_correct = torch.zeros(len(topk_values), dtype=torch.float64)
+    max_requested_k = max(topk_values)
+    use_autocast = use_amp and device.type == "cuda"
 
-    model.eval()
     with torch.no_grad():
         for batch in iterator:
-            batch = send_to_device(batch, device=device)
+            pixel_values = batch["pixel_values"].to(device, non_blocking=True)
+            labels = batch["labels"].to(device, non_blocking=True)
             context = (
-                torch.autocast(device_type=device.type, dtype=torch.bfloat16)
-                if not disable_amp
+                torch.autocast(device_type=device.type, dtype=amp_dtype)
+                if use_autocast
                 else nullcontext()
             )
             with context:
-                outputs = model(**batch)
-                logits = outputs["logits"]
-                if "loss" in outputs and outputs["loss"] is not None:
-                    loss = outputs["loss"]
-                else:
-                    loss = F.cross_entropy(logits, batch["labels"])
-            batch_size = batch["labels"].size(0)
-            preds = logits.argmax(dim=-1)
-            total_correct += (preds == batch["labels"]).sum().item()
-            total_loss += loss.item() * batch_size
+                outputs = model(pixel_values=pixel_values, labels=labels)
+                logits = outputs.logits
+                loss = outputs.loss if outputs.loss is not None else F.cross_entropy(logits, labels)
+            batch_size = labels.size(0)
             total_samples += batch_size
+            total_loss += loss.item() * batch_size
+            preds = logits.argmax(dim=-1)
+            total_correct += (preds == labels).sum().item()
 
             available_k = min(max_requested_k, logits.size(-1))
-            if max_requested_k > logits.size(-1) and not warned_topk and rank == 0:
-                logger.warning(
-                    "Requested top-k accuracy larger than number of classes; "
-                    f"clipping to {available_k}."
-                )
-                warned_topk = True
-            if available_k > 0:
-                topk_preds = logits.topk(k=available_k, dim=-1).indices
-                matches = topk_preds.eq(batch["labels"].unsqueeze(1))
-                for idx, k in enumerate(topk_values):
-                    effective_k = min(k, available_k)
-                    correct = matches[:, :effective_k].any(dim=1).sum().item()
-                    topk_correct[idx] += correct
+            topk_preds = logits.topk(k=available_k, dim=-1).indices
+            matches = topk_preds.eq(labels.unsqueeze(1))
+            for idx, k in enumerate(topk_values):
+                effective_k = min(k, available_k)
+                correct = matches[:, :effective_k].any(dim=1).sum().item()
+                topk_correct[idx] += correct
 
-    device_for_reduce = device if device.type == "cuda" else torch.device("cpu")
-    tensors = {
-        "loss": torch.tensor(total_loss, device=device_for_reduce, dtype=torch.float64),
-        "correct": torch.tensor(total_correct, device=device_for_reduce, dtype=torch.float64),
-        "samples": torch.tensor(total_samples, device=device_for_reduce, dtype=torch.float64),
-        "topk": topk_correct.to(device_for_reduce),
-    }
-    for key, tensor in tensors.items():
-        tensors[key] = _reduce_tensor(tensor, ReduceOp.SUM)
-
-    total_samples = max(tensors["samples"].item(), 1.0)
     metrics = {
-        "loss": tensors["loss"].item() / total_samples,
-        "accuracy": tensors["correct"].item() / total_samples,
+        "loss": total_loss / max(total_samples, 1),
+        "accuracy": total_correct / max(total_samples, 1) * 100,
     }
     for idx, k in enumerate(topk_values):
-        metrics[f"accuracy@{k}"] = tensors["topk"][idx].item() / total_samples
-
+        metrics[f"accuracy@{k}"] = topk_correct[idx].item() / max(total_samples, 1) * 100
     return metrics
 
 
-def _dump_metrics(metrics: dict[str, float], path: str | None, rank: int) -> None:
-    if path is None or rank != 0:
+def _dump_metrics(metrics: dict[str, float], path: Path | None) -> None:
+    if path is None:
         return
-    output_path = Path(path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with output_path.open("w", encoding="utf-8") as file:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as file:
         json.dump(metrics, file, indent=2)
-    logger.info(f"Saved evaluation metrics to {output_path}")
+    logger.info(f"Saved metrics to {path}")
 
 
-@hydra.main(config_path="../../config", config_name="default_config", version_base=None)
-def main(cfg: DictConfig) -> None:
-    rank, world_size = _setup_distributed()
-    device = torch.device("cuda", int(os.environ.get("LOCAL_RANK", 0))) if torch.cuda.is_available() else torch.device("cpu")
-    if rank == 0:
-        logger.info("Starting evaluation with configuration:")
-        logger.info(OmegaConf.to_yaml(cfg))
+def main() -> None:
+    args = parse_args()
+    device = _resolve_device(args.device)
+    topk_values = _normalize_topk(args.topk)
+    amp_dtype = torch.bfloat16 if args.amp_dtype == "bfloat16" else torch.float16
 
-    processor = ProcessorFactory.get_processor(cfg)
-    dataloader, split_name = _build_dataloader(cfg, processor, rank, world_size)
-    model = ModelFactory.get_model(cfg)
-    use_fsdp = world_size > 1
-    model = _prepare_model_for_eval(model, cfg, use_fsdp)
-    if not use_fsdp:
-        model.to(device)
+    processor_name = args.processor or args.model
+    logger.info(f"Loading processor from {processor_name}")
+    processor = AutoImageProcessor.from_pretrained(
+        processor_name,
+        trust_remote_code=args.trust_remote_code,
+    )
+    logger.info(f"Loading model from {args.model}")
+    model = AutoModelForImageClassification.from_pretrained(
+        args.model,
+        trust_remote_code=args.trust_remote_code,
+    )
 
-    _load_checkpoint_if_needed(model, cfg.evaluation, world_size, rank)
-
-    metrics = _evaluate(model, dataloader, device, cfg, rank, world_size)
-    if rank == 0:
-        formatted = ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
-        logger.info(f"[split={split_name}] {formatted}")
-
-    _dump_metrics(metrics, cfg.evaluation.metrics_output_path, rank)
-    _cleanup_distributed()
+    dataloader = _build_dataloader(
+        dataset_name=args.dataset,
+        split=args.split,
+        processor=processor,
+        image_column=args.image_column,
+        label_column=args.label_column,
+        batch_size=args.batch_size,
+        num_workers=args.num_workers,
+        max_samples=args.max_samples,
+    )
+    logger.info(
+        f"Evaluating {args.model} on {args.dataset}[{args.split}] ({len(dataloader.dataset) if hasattr(dataloader.dataset, '__len__') else -1} samples)...",
+    )
+    metrics = _evaluate(
+        model=model,
+        dataloader=dataloader,
+        device=device,
+        topk_values=topk_values,
+        use_amp=args.use_amp,
+        amp_dtype=amp_dtype,
+        disable_tqdm=args.disable_tqdm,
+    )
+    formatted = ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
+    logger.info(f"Results - {formatted}")
+    _dump_metrics(metrics, args.metrics_output)
 
 
 if __name__ == "__main__":

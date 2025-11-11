@@ -40,8 +40,8 @@ trainer:
     name: adamw
     weight_decay: 0.01
   lr_scheduler:
-    name: cosine
-    num_warmup_rate: 0.1
+    name: wsd
+    num_warmup_rate: 0.05
     num_decay_steps: 100
   precision:
     param_type: bfloat16
@@ -49,14 +49,14 @@ trainer:
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 400
-  eval_steps: 100
-  save_steps: 100
+  num_steps: 300
+  eval_steps: 10
+  save_steps: 300
   save_total_limit: 5
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/vit-base
+  output_dir: outputs/vit-base-wsd-adamw-cosine
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
