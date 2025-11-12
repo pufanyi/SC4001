@@ -9,13 +9,13 @@ import torch.distributed as dist
 from accelerate.utils import send_to_device
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
-from torch.distributed import all_reduce
+from torch.distributed import ReduceOp, all_reduce
 from torch.distributed.checkpoint.state_dict import (
     StateDictOptions,
     set_model_state_dict,
 )
-from torch.distributed.fsdp import DeviceMesh, MixedPrecisionPolicy, fully_shard
-from torch.distributed.reduce_op import ReduceOp
+from torch.distributed.device_mesh import DeviceMesh
+from torch.distributed.fsdp import MixedPrecisionPolicy, fully_shard
 from torch.nn.utils import clip_grad_norm_
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -35,6 +35,15 @@ def _get_world_size() -> int:
     if not dist.is_available() or not dist.is_initialized():
         return 1
     return dist.get_world_size()
+
+
+def _distributed_barrier():
+    if not dist.is_available() or not dist.is_initialized():
+        return
+    if torch.cuda.is_available():
+        dist.barrier(device_ids=[torch.cuda.current_device()])
+    else:
+        dist.barrier()
 
 
 # Adapted from https://github.com/EvolvingLMMs-Lab/lmms-engine/blob/main/src/lmms_engine/utils/fsdp2_utils.py
@@ -70,8 +79,8 @@ def apply_fsdp2(
             modules.append(module)
 
     for module in modules:
-        fully_shard(module, fsdp_kwargs)
-    fully_shard(model, fsdp_kwargs)
+        fully_shard(module, **fsdp_kwargs)
+    fully_shard(model, **fsdp_kwargs)
 
 
 # Adapted from https://github.com/EvolvingLMMs-Lab/lmms-engine/blob/main/src/lmms_engine/utils/fsdp2_utils.py
@@ -122,19 +131,23 @@ class ClassifierTrainer:
         self.optimizer = get_optimizer(self.config, self.model)
         self.lr_scheduler = get_lr_scheduler(self.config, self.optimizer)
 
-    def compute_loss(self, batch: dict[str, torch.Tensor]) -> torch.Tensor:
+    def compute_loss(
+        self, batch: dict[str, torch.Tensor]
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         cast_type = getattr(torch, self.config.trainer.precision.param_type)
         with torch.autocast(device_type="cuda", dtype=cast_type):
             outputs = self.fsdp2_model(**batch)
             loss = outputs["loss"]
-        return loss
+        return outputs, loss
 
     def prepare_model(self):
-        param_type = getattr(torch, self.config.trainer.precision.param_type)
-        reduct_type = getattr(torch, self.config.trainer.precision.reduction_type)
-        output_type = getattr(torch, self.config.trainer.precision.output_type)
+        param_dtype = getattr(torch, self.config.trainer.precision.param_type)
+        reduce_dtype = getattr(torch, self.config.trainer.precision.reduction_type)
+        output_dtype = getattr(torch, self.config.trainer.precision.output_type)
         mp_policy = MixedPrecisionPolicy(
-            param_type=param_type, reduction_type=reduct_type, output_type=output_type
+            param_dtype=param_dtype,
+            reduce_dtype=reduce_dtype,
+            output_dtype=output_dtype,
         )
         reshard_after_forward = self.config.trainer.reshard_after_forward
         fsdp_config = {
@@ -159,24 +172,56 @@ class ClassifierTrainer:
         return self.global_step >= self.config.trainer.num_steps
 
     def eval(self):
+        rank = _get_rank()
+        world_size = _get_world_size()
         self.fsdp2_model.eval()
-        total_loss = 0
+        total_loss = 0.0
         total_batches = 0
+        num_correct = 0
+        num_samples = 0
+
         for batch in self.val_dataloader:
             batch = send_to_device(batch, device=torch.cuda.current_device())
+            batch_size = batch["labels"].size(0)
+            num_samples += batch_size
+
             with torch.no_grad():
-                loss = self.compute_loss(batch)
-                total_loss += loss.item()
+                outputs, loss = self.compute_loss(batch)
+                total_loss += loss.item() * batch_size  # weight by batch size
                 total_batches += 1
-        final_loss = total_loss / max(total_batches, 1)
-        logger.info(f"Step {self.global_step} evaluation loss: {final_loss}")
-        self._log({"eval/loss": final_loss})
+                preds = outputs["logits"].argmax(dim=-1)
+                num_correct += (preds == batch["labels"]).sum().item()
+
+        # Synchronize metrics across all ranks in distributed training
+        if world_size > 1:
+            # Convert to tensors for all_reduce
+            metrics_tensor = torch.tensor(
+                [total_loss, num_correct, num_samples],
+                dtype=torch.float32,
+                device=torch.cuda.current_device(),
+            )
+            all_reduce(metrics_tensor, op=ReduceOp.SUM)
+            total_loss, num_correct, num_samples = metrics_tensor.tolist()
+
+        # Calculate global metrics
+        final_loss = total_loss / max(num_samples, 1)
+        accuracy = num_correct / max(num_samples, 1)
+
+        if rank == 0:
+            logger.info(
+                f"Step {self.global_step} evaluation loss: {final_loss:.4f}, accuracy: {accuracy:.4f}"
+            )
+            self._log({"eval/loss": final_loss, "eval/accuracy": accuracy})
+
         return final_loss
 
     def save_model(self):
         rank = _get_rank()
         world_size = _get_world_size()
-        output_dir = Path(self.config.trainer.get("output_dir", "outputs")) / f"step_{self.global_step}"
+        output_dir = (
+            Path(self.config.trainer.get("output_dir", "outputs"))
+            / f"step_{self.global_step}"
+        )
         if rank == 0:
             output_dir.mkdir(parents=True, exist_ok=True)
         model_path = output_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
@@ -192,8 +237,7 @@ class ClassifierTrainer:
             optimizer_path.parent.mkdir(parents=True, exist_ok=True)
             extra_state_path.parent.mkdir(parents=True, exist_ok=True)
             dataloader_state_path.parent.mkdir(parents=True, exist_ok=True)
-        if dist.is_available() and dist.is_initialized():
-            dist.barrier()
+        _distributed_barrier()
         torch.save(self.fsdp2_model.state_dict(), model_path)
         torch.save(self.optimizer.state_dict(), optimizer_path)
         extra_state = {
@@ -206,15 +250,17 @@ class ClassifierTrainer:
             dataloader_state = self.train_dataloader.state_dict()
             torch.save(dataloader_state, dataloader_state_path)
         else:
-            logger.warning("Train dataloader does not implement state_dict; skipping save")
-        logger.info(f"State saved to {output_dir}")
-        self._log({"checkpoint/step": self.global_step})
-        if (
-            rank == 0
-            and self.config.trainer.save_total_limit is not None
-            and self.config.trainer.save_total_limit > 0
-        ):
-            self._prune_checkpoints(output_dir.parent)
+            logger.warning(
+                "Train dataloader does not implement state_dict; skipping save"
+            )
+        if rank == 0:
+            logger.info(f"State saved to {output_dir}")
+            self._log({"checkpoint/step": self.global_step})
+            if (
+                self.config.trainer.save_total_limit is not None
+                and self.config.trainer.save_total_limit > 0
+            ):
+                self._prune_checkpoints(output_dir.parent)
 
     def get_rng_state(self):
         rng_state = {
@@ -322,8 +368,12 @@ class ClassifierTrainer:
         world_size = _get_world_size()
         logger.info(f"Resuming training from checkpoint {checkpoint_dir}")
         model_path = checkpoint_dir / "model" / f"ws_{world_size}_rank_{rank}.pt"
-        optimizer_path = checkpoint_dir / "optimizer" / f"ws_{world_size}_rank_{rank}.pt"
-        extra_state_path = checkpoint_dir / "extra_state" / f"ws_{world_size}_rank_{rank}.pt"
+        optimizer_path = (
+            checkpoint_dir / "optimizer" / f"ws_{world_size}_rank_{rank}.pt"
+        )
+        extra_state_path = (
+            checkpoint_dir / "extra_state" / f"ws_{world_size}_rank_{rank}.pt"
+        )
         dataloader_state_path = (
             checkpoint_dir / "dataloader_state" / f"ws_{world_size}_rank_{rank}.pt"
         )
@@ -351,7 +401,9 @@ class ClassifierTrainer:
         if dataloader_state_path.exists() and hasattr(
             self.train_dataloader, "load_state_dict"
         ):
-            dataloader_state = torch.load(dataloader_state_path, map_location=map_location)
+            dataloader_state = torch.load(
+                dataloader_state_path, map_location=map_location
+            )
             self.train_dataloader.load_state_dict(dataloader_state)
         elif dataloader_state_path.exists():
             logger.warning(
@@ -413,13 +465,14 @@ class ClassifierTrainer:
                     batch = send_to_device(batch, device=torch.cuda.current_device())
                     self.fsdp2_model.train()
                     self.optimizer.zero_grad()
-                    loss = self.compute_loss(batch)
+                    outputs, loss = self.compute_loss(batch)
                     if world_size > 1:
                         loss = loss.mean()
                     loss_item = loss.item()
                     loss.backward()
                     grad_norm = clip_grad_norm_(
-                        self.fsdp2_model.parameters(), self.config.trainer.grad_norm_clip
+                        self.fsdp2_model.parameters(),
+                        self.config.trainer.grad_norm_clip,
                     )
                     grad_norm_tensor = (
                         grad_norm
@@ -440,21 +493,31 @@ class ClassifierTrainer:
                         self.optimizer.zero_grad()
                     self.lr_scheduler.step()
                     current_lr = self.lr_scheduler.get_last_lr()[0]
-                    loss_item = torch.tensor(loss_item, device=torch.cuda.current_device())
+                    loss_item = torch.tensor(
+                        loss_item, device=torch.cuda.current_device()
+                    )
                     all_reduce(loss_item, op=ReduceOp.AVG)
                     self.global_step += 1
-                    logger.info(
-                        f"Step {self.global_step} training loss: {loss_item.item()}"
-                    )
+                    if rank == 0:
+                        logger.info(
+                            f"Step {self.global_step} training loss: {loss_item.item()}"
+                        )
                     metrics = {
                         "train/loss": loss_item.item(),
                         "train/grad_norm": grad_norm_value,
                         "train/lr": current_lr,
+                        "train/epoch": self.global_step / len(self.train_dataloader),
                     }
-                    if self.global_step % self.config.trainer.logging_steps == 0:
+                    if (
+                        rank == 0
+                        and self.global_step % self.config.trainer.logging_steps == 0
+                    ):
                         self._log(metrics)
                     if self.global_step % self.config.trainer.eval_steps == 0:
+                        _distributed_barrier()
                         self.eval()
+                        _distributed_barrier()
+                        self.fsdp2_model.train()  # Set back to train mode
                     if self.global_step % self.config.trainer.save_steps == 0:
                         self.save_model()
                     pbar.update(1)

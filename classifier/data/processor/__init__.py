@@ -1,4 +1,3 @@
-from .convnext_processor import ConvNeXtProcessor, ConvNeXtTrainProcessor
-from .processor import Processor
+from .factory import ProcessorFactory
 
-__all__ = ["ConvNeXtProcessor", "ConvNeXtTrainProcessor", "Processor"]
+__all__ = ["ProcessorFactory"]

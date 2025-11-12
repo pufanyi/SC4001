@@ -3,61 +3,60 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: facebook/convnextv2-huge-22k-384
+  name: google/vit-large-patch16-384
   pretrained: true
 processor:
-  name: facebook/convnextv2-huge-22k-384
+  name: google/vit-large-patch16-384
   train:
-    use_different_processors: true
-    use_randaugment: true
+    use_randaugment: false
     randaugment_n: 2
     randaugment_m: 9
     scale: [0.5, 1.0]
     ratio: [0.75, 1.33]
     hflip_prob: 0.5
-    vflip_prob: 0.1
-    rotation_degrees: 15
+    vflip_prob: 0.0
+    rotation_degrees: 10
     use_color_jitter: true
-    brightness: 0.4
-    contrast: 0.4
-    saturation: 0.4
-    hue: 0.2
-    grayscale_prob: 0.1
-    blur_prob: 0.2
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.1
+    grayscale_prob: 0.05
+    blur_prob: 0.1
     blur_sigma: [0.1, 2.0]
     use_random_erasing: true
-    erasing_prob: 0.25
-    erasing_scale: [0.02, 0.33]
+    erasing_prob: 0.2
+    erasing_scale: [0.02, 0.2]
     erasing_ratio: [0.3, 3.3]
 trainer:
-  train_batch_size: 32
-  eval_batch_size: 128
-  dataloader_num_workers: 16
-  learning_rate: 1.0e-5
+  train_batch_size: 128
+  eval_batch_size: 512
+  dataloader_num_workers: 12
+  learning_rate: 5.0e-5
   optimizer:
     name: adamw
-    weight_decay: 1.0e-5
+    weight_decay: 0.01
   lr_scheduler:
-    name: cosine
+    name: wsd
     num_warmup_rate: 0.05
-    # num_decay_steps: 100
+    num_decay_steps: 100
   precision:
     param_type: bfloat16
     reduction_type: float32
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 200
+  num_steps: 300
   eval_steps: 10
-  save_steps: 200
-  save_total_limit: 10
+  save_steps: 300
+  save_total_limit: 5
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/convnextv2-huge-22k-384
+  output_dir: outputs/vit-base-wsd-adamw-cosine
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: convnextv2-huge-22k-384-lr1e-5-cosine
+  wandb_run_name: null
   wandb_run_id: null
   wandb_tags: []

@@ -6,18 +6,19 @@ from .muon import Muon
 
 
 def get_optimizer(config: DictConfig, model: PreTrainedModel):
-    if config.trainer.optimizer.name == "adamw":
+    optimizer_cfg = config.trainer.optimizer
+    if optimizer_cfg.name == "adamw":
         return AdamW(
             model.parameters(),
             lr=config.trainer.learning_rate,
-            weight_decay=config.trainer.weight_decay,
+            weight_decay=optimizer_cfg.weight_decay,
         )
-    elif config.trainer.optimizer.name == "muon":
+    elif optimizer_cfg.name == "muon":
         return Muon(
             model.parameters(),
             lr=config.trainer.learning_rate,
-            weight_decay=config.trainer.weight_decay,
-            momentum=config.trainer.momentum,
+            weight_decay=optimizer_cfg.weight_decay,
+            momentum=optimizer_cfg.get("momentum", 0.9),
         )
     else:
-        raise ValueError(f"Unknown optimizer: {config.trainer.name}")
+        raise ValueError(f"Unknown optimizer: {optimizer_cfg.name}")

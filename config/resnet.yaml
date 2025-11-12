@@ -3,10 +3,10 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: facebook/convnextv2-huge-22k-384
+  name: microsoft/resnet-152
   pretrained: true
 processor:
-  name: facebook/convnextv2-huge-22k-384
+  name: microsoft/resnet-152
   train:
     use_different_processors: true
     use_randaugment: true
@@ -30,34 +30,34 @@ processor:
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
 trainer:
-  train_batch_size: 32
-  eval_batch_size: 128
-  dataloader_num_workers: 16
-  learning_rate: 1.0e-5
+  train_batch_size: 128
+  eval_batch_size: 512
+  dataloader_num_workers: 64
+  learning_rate: 1.0e-4
   optimizer:
     name: adamw
     weight_decay: 1.0e-5
   lr_scheduler:
-    name: cosine
+    name: wsd
     num_warmup_rate: 0.05
-    # num_decay_steps: 100
+    num_decay_steps: 100
   precision:
-    param_type: bfloat16
+    param_type: float32
     reduction_type: float32
-    output_type: bfloat16
+    output_type: float32
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 200
-  eval_steps: 10
-  save_steps: 200
-  save_total_limit: 10
+  num_steps: 1000
+  eval_steps: 20
+  save_steps: 1000
+  save_total_limit: 1
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/convnextv2-huge-22k-384
+  output_dir: outputs/resnet152-wsd-adamw
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: convnextv2-huge-22k-384-lr1e-5-cosine
+  wandb_run_name: resnet152-wsd-adamw
   wandb_run_id: null
   wandb_tags: []

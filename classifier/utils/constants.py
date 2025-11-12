@@ -1,9 +1,9 @@
 import json
 from pathlib import Path
 
-from logger import logger
+from .logger import logger
 
-CLASSES_PATH = Path(__file__).parent / "classes.json"
+CLASSES_PATH = Path(__file__).parent.parent.parent / "config" / "classes.json"
 CLASSES = json.load(open(CLASSES_PATH))
 NUM_CLASSES = len(CLASSES)
 ID2LABEL = dict(enumerate(CLASSES))

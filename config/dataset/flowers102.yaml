@@ -1,0 +1,16 @@
+# Flowers102 dataset configuration
+name: flowers102
+dataset_id: pufanyi/flowers102
+# Data splits
+train_split: train
+val_split: validation
+test_split: test
+# Column names in the dataset
+image_column: image
+label_column: label
+# Optional: limit number of samples (useful for debugging)
+max_train_samples: null
+max_val_samples: null
+max_test_samples: null
+# Number of classes
+num_classes: 102

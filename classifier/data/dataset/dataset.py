@@ -1,9 +1,10 @@
+from collections.abc import Callable
+
 import torch
 from datasets import load_dataset
 from PIL import Image
 from torch.utils.data import Dataset
-
-from ..processor import Processor
+from transformers import BaseImageProcessor
 
 
 class HFDataset(Dataset):
@@ -11,8 +12,8 @@ class HFDataset(Dataset):
         self,
         dataset_name: str,
         split: str,
-        processor: Processor,
-        transform: callable | None = None,
+        processor: BaseImageProcessor,
+        transform: Callable[[Image.Image], torch.Tensor] | None = None,
         image_column: str = "image",
         label_column: str = "label",
     ):
@@ -21,7 +22,7 @@ class HFDataset(Dataset):
             dataset_name: Name of the dataset on Hugging Face Hub
             split: Dataset split ('train', 'validation', 'test')
             processor: Processor instance for preprocessing images
-            transform: Optional additional transforms
+            transform: Optional torchvision-style transform for pre-processing
             image_column: Name of the column containing images
             label_column: Name of the column containing labels
         """
@@ -50,12 +51,11 @@ class HFDataset(Dataset):
         if not isinstance(image, Image.Image):
             image = Image.fromarray(image).convert("RGB")
 
-        # Apply additional transforms if provided
         if self.transform is not None:
-            image = self.transform(image)
-
-        # Process image
-        pixel_values = self.processor(image)
+            pixel_values = self.transform(image)
+        else:
+            processed = self.processor(image, return_tensors="pt")
+            pixel_values = processed["pixel_values"].squeeze(0)
 
         # Get label
         label = sample[self.label_column]
