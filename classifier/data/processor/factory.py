@@ -92,7 +92,10 @@ class ProcessorFactory:
             )
         )
 
-        if config.processor.train.use_different_processors and config.processor.train.use_random_erasing:
+        if (
+            config.processor.train.use_different_processors
+            and config.processor.train.use_random_erasing
+        ):
             transform_list.append(
                 transforms.RandomErasing(
                     p=config.processor.train.erasing_prob,
