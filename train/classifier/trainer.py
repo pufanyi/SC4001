@@ -1,6 +1,7 @@
 import gc
 import random
 import shutil
+from itertools import cycle
 from pathlib import Path
 
 import numpy as np
@@ -458,69 +459,70 @@ class ClassifierTrainer:
         if self.global_step > 0:
             pbar.update(self.global_step)
         try:
+            # Create an infinite iterator to avoid dataloader reinitialization overhead
+            infinite_dataloader = cycle(self.train_dataloader)
+            
             while not self.should_stop():
-                for batch in self.train_dataloader:
-                    if self.should_stop():
-                        break
-                    batch = send_to_device(batch, device=torch.cuda.current_device())
-                    self.fsdp2_model.train()
+                batch = next(infinite_dataloader)
+                batch = send_to_device(batch, device=torch.cuda.current_device())
+                self.fsdp2_model.train()
+                self.optimizer.zero_grad()
+                _outputs, loss = self.compute_loss(batch)
+                if world_size > 1:
+                    loss = loss.mean()
+                loss_item = loss.item()
+                loss.backward()
+                grad_norm = clip_grad_norm_(
+                    self.fsdp2_model.parameters(),
+                    self.config.trainer.grad_norm_clip,
+                )
+                grad_norm_tensor = (
+                    grad_norm
+                    if isinstance(grad_norm, torch.Tensor)
+                    else torch.tensor(grad_norm)
+                )
+                grad_norm_value = (
+                    grad_norm_tensor.item()
+                    if grad_norm_tensor.numel() == 1
+                    else float(grad_norm_tensor.mean().item())
+                )
+                if torch.isfinite(grad_norm_tensor).all():
+                    self.optimizer.step()
+                else:
+                    logger.warning(
+                        f"Step {self.global_step} gradient norm is not finite, skipping optimizer step"
+                    )
                     self.optimizer.zero_grad()
-                    outputs, loss = self.compute_loss(batch)
-                    if world_size > 1:
-                        loss = loss.mean()
-                    loss_item = loss.item()
-                    loss.backward()
-                    grad_norm = clip_grad_norm_(
-                        self.fsdp2_model.parameters(),
-                        self.config.trainer.grad_norm_clip,
+                self.lr_scheduler.step()
+                current_lr = self.lr_scheduler.get_last_lr()[0]
+                loss_item = torch.tensor(
+                    loss_item, device=torch.cuda.current_device()
+                )
+                all_reduce(loss_item, op=ReduceOp.AVG)
+                self.global_step += 1
+                if rank == 0:
+                    logger.info(
+                        f"Step {self.global_step} training loss: {loss_item.item()}"
                     )
-                    grad_norm_tensor = (
-                        grad_norm
-                        if isinstance(grad_norm, torch.Tensor)
-                        else torch.tensor(grad_norm)
-                    )
-                    grad_norm_value = (
-                        grad_norm_tensor.item()
-                        if grad_norm_tensor.numel() == 1
-                        else float(grad_norm_tensor.mean().item())
-                    )
-                    if torch.isfinite(grad_norm_tensor).all():
-                        self.optimizer.step()
-                    else:
-                        logger.warning(
-                            f"Step {self.global_step} gradient norm is not finite, skipping optimizer step"
-                        )
-                        self.optimizer.zero_grad()
-                    self.lr_scheduler.step()
-                    current_lr = self.lr_scheduler.get_last_lr()[0]
-                    loss_item = torch.tensor(
-                        loss_item, device=torch.cuda.current_device()
-                    )
-                    all_reduce(loss_item, op=ReduceOp.AVG)
-                    self.global_step += 1
-                    if rank == 0:
-                        logger.info(
-                            f"Step {self.global_step} training loss: {loss_item.item()}"
-                        )
-                    metrics = {
-                        "train/loss": loss_item.item(),
-                        "train/grad_norm": grad_norm_value,
-                        "train/lr": current_lr,
-                        "train/epoch": self.global_step / len(self.train_dataloader),
-                    }
-                    if (
-                        rank == 0
-                        and self.global_step % self.config.trainer.logging_steps == 0
-                    ):
-                        self._log(metrics)
-                    if self.global_step % self.config.trainer.eval_steps == 0:
-                        _distributed_barrier()
-                        self.eval()
-                        _distributed_barrier()
-                        self.fsdp2_model.train()  # Set back to train mode
-                    if self.global_step % self.config.trainer.save_steps == 0:
-                        self.save_model()
-                    pbar.update(1)
+                metrics = {
+                    "train/loss": loss_item.item(),
+                    "train/grad_norm": grad_norm_value,
+                    "train/lr": current_lr,
+                    "train/epoch": self.global_step / len(self.train_dataloader),
+                }
+                if (
+                    rank == 0
+                    and self.global_step % self.config.trainer.logging_steps == 0
+                ):
+                    self._log(metrics)
+                if self.global_step % self.config.trainer.eval_steps == 0:
+                    _distributed_barrier()
+                    self.eval()
+                    _distributed_barrier()
+                    self.fsdp2_model.train()  # Set back to train mode
+                if self.global_step % self.config.trainer.save_steps == 0:
+                    self.save_model()
+                pbar.update(1)
         finally:
             pbar.close()
             self.close_logging()

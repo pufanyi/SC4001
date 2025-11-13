@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-name",
-        default="microsoft/resnet-152",
+        default="facebook/convnextv2-huge-22k-384",
         help="Base model name to instantiate before loading the checkpoint.",
     )
     parser.add_argument(

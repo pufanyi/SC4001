@@ -3,10 +3,10 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: microsoft/resnet-152
+  name: microsoft/resnet-18
   pretrained: true
 processor:
-  name: microsoft/resnet-152
+  name: microsoft/resnet-18
   train:
     use_different_processors: true
     use_randaugment: true
@@ -31,7 +31,7 @@ processor:
     erasing_ratio: [0.3, 3.3]
 trainer:
   train_batch_size: 128
-  eval_batch_size: 512
+  eval_batch_size: 1024
   dataloader_num_workers: 64
   learning_rate: 1.0e-4
   optimizer:
@@ -48,16 +48,16 @@ trainer:
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
   num_steps: 1000
-  eval_steps: 20
+  eval_steps: 100
   save_steps: 1000
   save_total_limit: 1
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/resnet152-wsd-adamw
+  output_dir: outputs/resnet18-wsd-adamw
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: resnet152-wsd-adamw
+  wandb_run_name: resnet18-wsd-adamw
   wandb_run_id: null
   wandb_tags: []
