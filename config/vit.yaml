@@ -8,7 +8,8 @@ model:
 processor:
   name: google/vit-large-patch16-384
   train:
-    use_randaugment: false
+    use_different_processors: false
+    use_randaugment: true
     randaugment_n: 2
     randaugment_m: 9
     scale: [0.5, 1.0]

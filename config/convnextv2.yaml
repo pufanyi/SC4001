@@ -3,12 +3,12 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: facebook/convnextv2-huge-22k-384
+  name: facebook/convnextv2-pico-1k-224
   pretrained: true
 processor:
-  name: facebook/convnextv2-huge-22k-384
+  name: facebook/convnextv2-pico-1k-224
   train:
-    use_different_processors: false
+    use_different_processors: true
     use_randaugment: true
     randaugment_n: 2
     randaugment_m: 9
@@ -40,7 +40,7 @@ trainer:
   lr_scheduler:
     name: wsd
     num_warmup_rate: 0.05
-    num_decay_steps: 100
+    num_decay_steps: 200
   precision:
     param_type: bfloat16
     reduction_type: float32
@@ -54,10 +54,10 @@ trainer:
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/convnextv2-huge-22k-384
+  output_dir: outputs/convnextv2-pico-1k-224
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: convnextv2-huge-22k-384-wsd-adamw
+  wandb_run_name: convnextv2-pico-1k-224-wsd-adamw
   wandb_run_id: null
   wandb_tags: []
