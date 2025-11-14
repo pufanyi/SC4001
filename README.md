@@ -29,23 +29,6 @@ uv run python -m data.upload_flowers102 \
 
 See `docs/dataset.md` for all arguments and troubleshooting tips.
 
-## Train Qwen3-VL
-Launch training with Hydra overrides inline:
-
-```bash
-uv run python -m train \
-  trainer.output_dir=outputs/qwen3-vl \
-  trainer.precision.bf16=true \
-  dataset.max_train_samples=512
-```
-
-Common overrides:
-- Switch base model: `model.model_id=Qwen/Qwen3-VL-4B-Instruct`
-- Enable grad checkpointing: `model.gradient_checkpointing=true`
-- Smoke test: reduce `dataset.max_*` counts
-
-Hydra writes checkpoints/processors under `trainer.output_dir`. Configuration details live in `docs/configuration.md`.
-
 ## Evaluate & Export
 - **Batch evaluation** (e.g., flowers test split):
   ```bash
