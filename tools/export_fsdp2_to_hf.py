@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-name",
-        default="facebook/convnextv2-pico-1k-224",
+        default="google/vit-large-patch16-384",
         help="Base model name to instantiate before loading the checkpoint.",
     )
     parser.add_argument(

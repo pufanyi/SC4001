@@ -30,7 +30,7 @@ processor:
     erasing_scale: [0.02, 0.33]
     erasing_ratio: [0.3, 3.3]
 trainer:
-  train_batch_size: 128
+  train_batch_size: 32
   eval_batch_size: 1024
   dataloader_num_workers: 64
   learning_rate: 1.0e-4

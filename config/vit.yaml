@@ -3,10 +3,10 @@ defaults:
   - evaluation: default
   - _self_
 model:
-  name: google/vit-large-patch16-384
+  name: google/vit-base-patch16-384
   pretrained: true
 processor:
-  name: google/vit-large-patch16-384
+  name: google/vit-base-patch16-384
   train:
     use_different_processors: false
     use_randaugment: true
@@ -40,24 +40,24 @@ trainer:
   lr_scheduler:
     name: wsd
     num_warmup_rate: 0.05
-    num_decay_steps: 100
+    num_decay_steps: 200
   precision:
     param_type: bfloat16
     reduction_type: float32
     output_type: bfloat16
   reshard_after_forward: false
   transformer_cls_names_to_wrap: null
-  num_steps: 300
-  eval_steps: 10
-  save_steps: 300
-  save_total_limit: 5
+  num_steps: 1000
+  eval_steps: 100
+  save_steps: 1000
+  save_total_limit: 1
   logging_steps: 1
   report_to: wandb
   grad_norm_clip: 1.0
-  output_dir: outputs/vit-base-wsd-adamw-cosine
+  output_dir: outputs/vit-base-patch16-384-wsd-adamw
   resume_from_checkpoint: null
   wandb_project: sc4001
   wandb_entity: pufanyi
-  wandb_run_name: null
+  wandb_run_name: vit-base-patch16-384-wsd-adamw
   wandb_run_id: null
   wandb_tags: []
