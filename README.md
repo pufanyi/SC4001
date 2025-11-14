@@ -1,6 +1,4 @@
-# SC4001 – Qwen3-VL Flowers Pipeline
-
-Fine-tuning, evaluating, and visualising the Qwen3-VL family on the Oxford 102 Flowers dataset. The repo includes dataset tooling, Hydra-driven training, evaluation scripts, and publication-ready visualisations.
+# SC4001 – Flowers Pipeline
 
 ## Highlights
 - **Dataset tooling** – convert and upload Flowers102 to the Hugging Face Hub.
