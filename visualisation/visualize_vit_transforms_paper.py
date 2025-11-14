@@ -5,6 +5,7 @@ Creates a clean, publication-ready figure showing the data augmentation pipeline
 
 import os
 from pathlib import Path
+import textwrap
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -80,7 +81,7 @@ def create_pipeline_transforms(config):
          ), False, f"scale∈{config.processor.train.scale}"),
         
         ("Horizontal Flip", 
-         transforms.RandomHorizontalFlip(p=1.0), 
+         transforms.RandomHorizontalFlip(p=config.processor.train.hflip_prob), 
          False, f"p={config.processor.train.hflip_prob}"),
         
         ("RandAugment", 
@@ -106,7 +107,7 @@ def create_pipeline_transforms(config):
         
         ("Random Erasing", 
          transforms.RandomErasing(
-             p=1.0,
+             p=config.processor.train.erasing_prob,
              scale=tuple(config.processor.train.erasing_scale),
              ratio=tuple(config.processor.train.erasing_ratio),
              value="random",
@@ -133,17 +134,21 @@ def visualize_transforms_paper(output_path="visualisation/imgs/sample.png"):
     print("Creating transformation pipeline...")
     transform_steps, mean, std = create_pipeline_transforms(config)
     
-    # Create figure with custom layout: Original on top center, 2x3 grid for transformations below
-    fig = plt.figure(figsize=(13, 7.5))
-    
-    # Create grid: 3 rows x 3 columns
-    # Row 0: Original (centered)
-    # Rows 1-2: 2x3 grid of transformations
-    gs = fig.add_gridspec(3, 3, hspace=0.25, wspace=0.15,
-                         left=0.05, right=0.95, top=0.94, bottom=0.02,
-                         height_ratios=[1.1, 1, 1])
-    
-    # Set white background
+    # Build a compact layout: original image spans the left column, pipeline flows in two rows
+    fig = plt.figure(figsize=(11.5, 5.8))
+    gs = fig.add_gridspec(
+        2,
+        4,
+        width_ratios=[1.15, 1, 1, 1],
+        height_ratios=[1, 1],
+        hspace=0.12,
+        wspace=0.08,
+        left=0.03,
+        right=0.97,
+        top=0.9,
+        bottom=0.08,
+    )
+
     fig.patch.set_facecolor('white')
     
     current_image = original_image
@@ -159,13 +164,11 @@ def visualize_transforms_paper(output_path="visualisation/imgs/sample.png"):
         
         # Create subplot with custom positioning
         if idx == 0:
-            # Original image - centered in top row, spanning all 3 columns
-            ax = fig.add_subplot(gs[0, 1])
+            ax = fig.add_subplot(gs[:, 0])  # Original spans both rows
         else:
-            # Transformation steps - arranged in 2x3 grid (rows 1-2)
-            transform_idx = idx - 1  # 0-5 for the 6 transformations
-            row = 1 + (transform_idx // 3)  # Row 1 or 2
-            col = transform_idx % 3  # Column 0, 1, or 2
+            transform_idx = idx - 1
+            row = transform_idx // 3
+            col = 1 + (transform_idx % 3)
             ax = fig.add_subplot(gs[row, col])
         
         try:
@@ -192,41 +195,66 @@ def visualize_transforms_paper(output_path="visualisation/imgs/sample.png"):
                         current_image = result
                         display_image = np.array(result)
             
-            # Display image
             ax.imshow(display_image)
-            
-            # Different styling for original vs transformations
-            if idx == 0:
-                ax.set_title(f"{name}\n{params}", fontsize=11, pad=6, fontweight='bold')
-                ax.text(0.05, 0.95, f"Step {idx}", transform=ax.transAxes,
-                       fontsize=9, verticalalignment='top', fontweight='bold',
-                       bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
-            else:
-                ax.set_title(f"{name}\n{params}", fontsize=9.5, pad=5)
-                ax.text(0.05, 0.95, f"Step {idx}", transform=ax.transAxes,
-                       fontsize=8.5, verticalalignment='top',
-                       bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
-            
-            ax.axis('off')
-            
+
+            wrapped_params = textwrap.fill(params, 28) if params else ""
+            title = f"{idx}. {name}"
+            ax.set_title(title, fontsize=10, fontweight='bold', loc='left', pad=8)
+            ax.text(
+                0.02,
+                0.05,
+                wrapped_params,
+                transform=ax.transAxes,
+                fontsize=8.3,
+                color='#4b4b4b',
+                ha='left',
+                va='bottom',
+                bbox=dict(boxstyle='round,pad=0.2', facecolor='white', edgecolor='0.85', linewidth=0.6, alpha=0.9),
+            )
+
+            ax.set_xticks([])
+            ax.set_yticks([])
+            for spine in ax.spines.values():
+                spine.set_visible(False)
+            ax.set_facecolor('#f6f6f6')
+
         except Exception as e:
             print(f"Error in step {idx}: {e}")
             ax.text(0.5, 0.5, f"Error:\n{str(e)[:50]}", 
                    ha='center', va='center', fontsize=9)
             ax.axis('off')
-    
-    # Add main title
-    fig.suptitle('Vision Transformer (ViT) Training Data Augmentation Pipeline', 
-                 fontsize=15, fontweight='bold')
+
+    fig.suptitle(
+        'Vision Transformer (ViT) Data Pipeline',
+        fontsize=14,
+        fontweight='bold',
+        y=0.98,
+    )
     
     # Save figure
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
     print(f"Saving visualization to {output_path}...")
-    plt.savefig(output_path, dpi=300, bbox_inches='tight', 
-               facecolor='white', edgecolor='none')
-    print(f"✓ Publication-ready visualization saved!")
+    plt.savefig(
+        output_path,
+        dpi=300,
+        bbox_inches='tight',
+        facecolor='white',
+        edgecolor='none',
+    )
+
+    pdf_path = output_path.with_suffix('.pdf')
+    print(f"Saving PDF copy to {pdf_path}...")
+    plt.savefig(
+        pdf_path,
+        dpi=300,
+        bbox_inches='tight',
+        facecolor='white',
+        edgecolor='none',
+    )
+
+    print("✓ Publication-ready visualization saved!")
     
     plt.close()
 
@@ -253,4 +281,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
