@@ -18,7 +18,9 @@ class ProcessorFactory:
             # Try different keys that might contain the image size
             image_size = inference_processor.size.get("shortest_edge")
             if image_size is None:
-                image_size = inference_processor.size.get("height", inference_processor.size.get("width", 224))
+                image_size = inference_processor.size.get(
+                    "height", inference_processor.size.get("width", 224)
+                )
         else:
             # If size is a single integer
             image_size = inference_processor.size

@@ -14,10 +14,12 @@ The following sections walk you through environment setup, dataset preparation, 
 - Python 3.10+ (tested on 3.13)
 - GPU with ≥24 GB VRAM recommended for full fine-tuning (adjust hyperparameters otherwise)
 - Hugging Face account and write token (`huggingface-cli login`)
-- Suggested Python dependencies (install with `pip` or `uv`):
+- [uv](https://docs.astral.sh/uv/) for dependency + virtual environment management:
   ```bash
-  pip install -U torch torchvision scipy datasets transformers hydra-core accelerate huggingface_hub
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  uv sync
   ```
+  All subsequent commands assume `uv run …` to ensure they execute inside the synced environment.
 
 ---
 
@@ -26,7 +28,7 @@ The following sections walk you through environment setup, dataset preparation, 
 The Oxford Flowers data is pulled via `torchvision.datasets.Flowers102`, then re-packed as a Hugging Face dataset with custom train/validation/test splits.
 
 ```bash
-python -m data.upload_flowers102 \
+uv run python -m data.upload_flowers102 \
   --repo-id pufanyi/flowers102 \
   --train-ratio 0.8 --val-ratio 0.1 --test-ratio 0.1 \
   --data-root ~/.cache/flowers102
@@ -56,7 +58,7 @@ Hydra keeps configuration modular in `train/conf/`:
 Override values inline when launching:
 
 ```bash
-python -m train trainer.output_dir=runs/qwen3-fp16 trainer.precision.fp16=true dataset.max_train_samples=512
+uv run python -m train trainer.output_dir=runs/qwen3-fp16 trainer.precision.fp16=true dataset.max_train_samples=512
 ```
 
 Hydra writes outputs in-place (`hydra.run.dir=.`) so checkpoints stay under the specified `output_dir`.
@@ -68,7 +70,7 @@ Hydra writes outputs in-place (`hydra.run.dir=.`) so checkpoints stay under the 
 To fine-tune `Qwen/Qwen3-VL` on your prepared dataset:
 
 ```bash
-python -m train
+uv run python -m train
 ```
 
 Common overrides:
@@ -80,7 +82,7 @@ Common overrides:
 
 Trainer metrics and checkpoints are stored under `trainer.output_dir`. The script also saves the processor (`AutoProcessor`) alongside the model weights.
 
-> Tip: use `accelerate launch ... python -m train ...` if you need multi-GPU support via Hugging Face Accelerate.
+> Tip: use `uv run accelerate launch ... python -m train ...` if you need multi-GPU support via Hugging Face Accelerate.
 
 ---
 

@@ -461,7 +461,7 @@ class ClassifierTrainer:
         try:
             # Create an infinite iterator to avoid dataloader reinitialization overhead
             infinite_dataloader = cycle(self.train_dataloader)
-            
+
             while not self.should_stop():
                 batch = next(infinite_dataloader)
                 batch = send_to_device(batch, device=torch.cuda.current_device())
@@ -495,9 +495,7 @@ class ClassifierTrainer:
                     self.optimizer.zero_grad()
                 self.lr_scheduler.step()
                 current_lr = self.lr_scheduler.get_last_lr()[0]
-                loss_item = torch.tensor(
-                    loss_item, device=torch.cuda.current_device()
-                )
+                loss_item = torch.tensor(loss_item, device=torch.cuda.current_device())
                 all_reduce(loss_item, op=ReduceOp.AVG)
                 self.global_step += 1
                 if rank == 0:

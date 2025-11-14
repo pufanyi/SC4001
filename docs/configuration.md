@@ -19,7 +19,7 @@ hydra:
   output_subdir: null
 ```
 
-When you run `python -m train`, Hydra merges:
+When you run `uv run python -m train`, Hydra merges:
 
 1. `dataset/flowers.yaml`
 2. `model/qwen3_vl.yaml`
@@ -58,14 +58,14 @@ The `_self_` entry ensures values in `config.yaml` override earlier defaults.
 
 ```bash
 # Fast sanity check with fewer examples and lighter precision
-python -m train \
+uv run python -m train \
   dataset.max_train_samples=256 \
   dataset.max_eval_samples=128 \
   trainer.precision.fp16=true \
   trainer.output_dir=runs/debug-fp16
 
 # Enable gradient checkpointing and change base model
-python -m train \
+uv run python -m train \
   model.model_id=Qwen/Qwen3-VL-4B-Instruct \
   model.gradient_checkpointing=true
 ```
@@ -73,13 +73,13 @@ python -m train \
 Hydra also accepts overrides from config files:
 
 ```bash
-python -m train --config-name=config --config-path=train/conf +trainer.num_train_epochs=3
+uv run python -m train --config-name=config --config-path=train/conf +trainer.num_train_epochs=3
 ```
 
 ## Adding New Variants
 
 1. Drop a new YAML into `train/conf/dataset/` or `train/conf/trainer/`.
-2. Reference it via `python -m train dataset=<name>` (Hydra picks `dataset/<name>.yaml`).
+2. Reference it via `uv run python -m train dataset=<name>` (Hydra picks `dataset/<name>.yaml`).
 3. If additional fields are required, extend the dataclasses in `train/config.py`.
 
 This keeps experiments reproducible and explicit without editing Python code for every run.

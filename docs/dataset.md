@@ -14,7 +14,7 @@ The Oxford 102 Flowers dataset is distributed as MATLAB archives through Oxford'
 ## Usage
 
 ```bash
-python -m data.upload_flowers102 \
+uv run python -m data.upload_flowers102 \
   --repo-id <username>/flowers102 \
   --train-ratio 0.8 \
   --val-ratio 0.1 \
