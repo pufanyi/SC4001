@@ -13,9 +13,15 @@ class ProcessorFactory:
     def get_train_processor(config: DictConfig) -> transforms.Compose:
         inference_processor = ProcessorFactory.get_processor(config)
 
-        image_size = inference_processor.size.get("shortest_edge", 384)
-        if isinstance(image_size, dict):
-            image_size = image_size.get("height", 384)
+        # Handle different processor size formats
+        if isinstance(inference_processor.size, dict):
+            # Try different keys that might contain the image size
+            image_size = inference_processor.size.get("shortest_edge")
+            if image_size is None:
+                image_size = inference_processor.size.get("height", inference_processor.size.get("width", 224))
+        else:
+            # If size is a single integer
+            image_size = inference_processor.size
 
         transform_list = []
 

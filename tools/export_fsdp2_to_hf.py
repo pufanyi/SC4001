@@ -47,7 +47,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--model-name",
-        default="google/vit-large-patch16-384",
+        default="google/vit-huge-patch14-384",
         help="Base model name to instantiate before loading the checkpoint.",
     )
     parser.add_argument(
